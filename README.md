@@ -42,7 +42,7 @@ The application is already built and ready to use. You can download the compiled
 
 Navigate to the following path in the repository to download the release build:
 
-📁 **[`D Music/android/app/build/outputs/apk/release/D-Music.apk`](./D%20Music/android/app/build/outputs/apk/release/D-Music.apk)**
+📁 **[`android/app/build/outputs/apk/release/D-Music.apk`](./D%20Music/android/app/build/outputs/apk/release/D-Music.apk)**
 
 **How to Install:**
 1. Click the file path above or navigate to it in the repository, and click **Download** to save the `D-Music.apk` file to your Android device.
