@@ -42,7 +42,7 @@ The application is already built and ready to use. You can download the compiled
 
 Navigate to the following path in the repository to download the release build:
 
-📁 **https://github.com/Ronak-Patra/D-Music/releases**
+📁 Download: [here](https://github.com/Ronak-Patra/D-Music/releases)
 
 **How to Install:**
 1. Click the file path above or navigate to it in the repository, and click **Download** to save the `D-Music.apk` file to your Android device.
