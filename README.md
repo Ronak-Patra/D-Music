@@ -1,4 +1,5 @@
-# 🎵 D-Music
+# <img width="148" height="134" alt="image" src="https://github.com/user-attachments/assets/45a88520-a08f-4d72-b86e-1c3169a9d35d" />
+ D-Music
 
 **A feature-rich Android mobile application for local and streaming audio, featuring dynamic UI, live lyrics, Spotify playlist imports, and comprehensive listening stats.**
 
