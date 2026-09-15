@@ -10,7 +10,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useLikedSongs } from '@/hooks/useLikedSongs';
 import { HorizontalTrackList } from '@/components/HorizontalTrackList';
-import { useRouter , useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useNavigation } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { COUNTRY_NAMES } from '@/constants/countryNames';
@@ -33,6 +33,7 @@ const TRENDING_ENABLED_KEY = 'openspot_trending_enabled_v1';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const colorScheme = useColorScheme();
   const { t, i18n } = useTranslation();
   const { mode, setMode } = useThemeMode();
@@ -55,8 +56,11 @@ export default function HomeScreen() {
   const { clearResults } = searchState;
   const { handleTrackSelect, musicQueue, isPlaying, currentTrack } = useContext(MusicPlayerContext);
   const [trendingTracks, setTrendingTracks] = useState<Track[]>([]);
+  const [newReleasesTracks, setNewReleasesTracks] = useState<Track[]>([]);
+  const [mostViewedTracks, setMostViewedTracks] = useState<Track[]>([]);
   const { getLikedSongsAsTrack } = useLikedSongs();
   const likedTracks = getLikedSongsAsTrack();
+  const [isTrendingLoading, setIsTrendingLoading] = useState(false);
   const [detectedCountry, setDetectedCountry] = useState('your country');
   const [regionOverride, setRegionOverride] = useState<string>('auto');
   const [countryLoading, setCountryLoading] = useState(true);
@@ -270,6 +274,21 @@ export default function HomeScreen() {
   useEffect(() => {
     let isMounted = true;
 
+    const isRecentTrack = (track: Track, maxMonthsAge: number = 6) => {
+      if (!track.releaseDate) return true;
+      const release = new Date(track.releaseDate);
+      if (isNaN(release.getTime())) {
+        if (track.releaseDate.length === 4) {
+          const year = parseInt(track.releaseDate);
+          return (new Date().getFullYear() - year) <= 1;
+        }
+        return true;
+      }
+      const now = new Date();
+      const monthsDiff = (now.getFullYear() - release.getFullYear()) * 12 + now.getMonth() - release.getMonth();
+      return monthsDiff >= 0 && monthsDiff <= maxMonthsAge;
+    };
+
     const fetchTrendingTracks = async (list: string[]) => {
 
       let cache = { ...trendingCache };
@@ -363,41 +382,31 @@ export default function HomeScreen() {
     };
 
     if (!countryLoading && activeRegion && activeRegion !== 'your country') {
-      if ((activeRegion === 'India' && subRegion) || musicStyle) {
+      const hasSpecificFilter = !!musicStyle || !!subRegion;
+      setIsTrendingLoading(true);
+
+      if (hasSpecificFilter) {
         const fetchStyleOrRegion = async () => {
-          const isIndiaSub = activeRegion === 'India' && !!subRegion;
-          const fetchForQuery = async (hasStyle: boolean, hasSub: boolean) => {
-            if (hasStyle || hasSub) {
-              try {
-                let pQuery = '';
-                if (hasStyle && hasSub) pQuery = `${subRegion} ${musicStyle} Hits`;
-                else if (hasStyle) pQuery = `${musicStyle} Hits`;
-                else if (hasSub) pQuery = `${subRegion} Hits`;
-                
-                const pRes = await MusicAPI.search({ q: pQuery, type: 'playlist' });
-                if (pRes.playlists && pRes.playlists.length > 0) {
-                  const playlistId = pRes.playlists[0].id;
-                  const playlistTracks = await MusicAPI.getPlaylistSongs(playlistId);
-                  if (playlistTracks.length > 0) return { tracks: playlistTracks };
-                }
-              } catch (e) {
-                console.log('Playlist fetch failed, falling back to tracks');
+          let searchQuery = 'Top 50 ';
+          if (subRegion) searchQuery += `${subRegion} `;
+          else if (activeRegion && activeRegion !== 'India' && activeRegion !== 'your country') searchQuery += `${activeRegion} `;
+          if (musicStyle) searchQuery += `${musicStyle} `;
+          
+          try {
+            const queryName = searchQuery.trim();
+            const res = await MusicAPI.search({ q: queryName, type: 'playlist' });
+            if (res.playlists && res.playlists.length > 0) {
+              const pId = res.playlists[0].id;
+              const result = await MusicAPI.getPlaylistSongsPaginated(pId, 0);
+              if (result.tracks && result.tracks.length > 0) {
+                return { tracks: result.tracks };
               }
             }
-            
-            let searchQuery = 'Top ';
-            if (hasSub) searchQuery += `${subRegion} `;
-            if (hasStyle) searchQuery += `${musicStyle} `;
-            searchQuery += 'Songs';
-            return MusicAPI.searchTracks(searchQuery.trim(), 1, 20);
-          };
-
-          let res = await fetchForQuery(!!musicStyle, isIndiaSub);
-          
-          if ((!res || !res.tracks || res.tracks.length === 0) && musicStyle && (isIndiaSub || activeRegion)) {
-             res = await fetchForQuery(false, isIndiaSub);
+            return MusicAPI.searchTracks(queryName.replace('Top 50', '').trim(), 1, 30);
+          } catch (e) {
+            console.warn('Playlist fallback to track search failed', e);
+            return MusicAPI.searchTracks(searchQuery.replace('Top 50', '').trim(), 1, 30);
           }
-          return res;
         };
         
         fetchStyleOrRegion().then(res => {
@@ -413,27 +422,100 @@ export default function HomeScreen() {
             });
             setTrendingTracks(dedupedTracks);
           }
+          if (isMounted) setIsTrendingLoading(false);
         });
-        return () => { isMounted = false; };
-      }
-
-      const activeKey = activeRegion.toLowerCase();
-      const regionKey = Object.keys(regionUrlMap).find(k => k.toLowerCase() === activeKey);
-      if (regionKey && regionUrlMap[regionKey]) {
-        fetchKworbWeekly(regionUrlMap[regionKey]);
       } else {
-        const globalKey = Object.keys(regionUrlMap).find(k => k.toLowerCase() === 'global');
-        if (globalKey && regionUrlMap[globalKey]) {
-          fetchKworbWeekly(regionUrlMap[globalKey]);
+        const activeKey = activeRegion.toLowerCase();
+        const regionKey = Object.keys(regionUrlMap).find(k => k.toLowerCase() === activeKey);
+        if (regionKey && regionUrlMap[regionKey]) {
+          fetchKworbWeekly(regionUrlMap[regionKey]).finally(() => {
+            if (isMounted) setIsTrendingLoading(false);
+          });
         } else {
-          if (isMounted) setTrendingTracks([]);
+          const globalKey = Object.keys(regionUrlMap).find(k => k.toLowerCase() === 'global');
+          if (globalKey && regionUrlMap[globalKey]) {
+            fetchKworbWeekly(regionUrlMap[globalKey]).finally(() => {
+              if (isMounted) setIsTrendingLoading(false);
+            });
+          } else {
+            if (isMounted) {
+              setTrendingTracks([]);
+              setIsTrendingLoading(false);
+            }
+          }
         }
       }
     } else {
-      if (isMounted) setTrendingTracks([]);
+      if (isMounted) {
+        setTrendingTracks([]);
+        setIsTrendingLoading(false);
+      }
     }
+    
+    const fetchNewReleases = async () => {
+      if (countryLoading || !activeRegion) return;
+      let query = 'Latest ';
+      if (subRegion) query += `${subRegion} `;
+      else if (activeRegion && activeRegion !== 'India' && activeRegion !== 'your country') query += `${activeRegion} `;
+      else if (activeRegion === 'India') query += `Hindi `;
+      if (musicStyle) query += `${musicStyle} `;
+      
+      query += ` ${new Date().getFullYear()}`;
+      
+      try {
+        const queryName = query.trim();
+        const albumRes = await MusicAPI.search({ q: queryName, type: 'album' });
+        let finalTracks: Track[] = [];
+        
+        if (albumRes.albums && albumRes.albums.length > 0) {
+          const albumPromises = albumRes.albums.slice(0, 3).map(a => MusicAPI.getAlbumSongs(a.id));
+          const albumResults = await Promise.allSettled(albumPromises);
+          
+          for (const res of albumResults) {
+            if (res.status === 'fulfilled' && res.value && res.value.length > 0) {
+              finalTracks = [...finalTracks, ...res.value];
+            }
+          }
+        }
+        
+        if (finalTracks.length === 0) {
+          const fallbackQuery = queryName.replace('Latest', '').replace(new Date().getFullYear().toString(), '').trim();
+          const res = await MusicAPI.searchTracks(fallbackQuery, 1, 15);
+          finalTracks = res.tracks || [];
+        }
+        
+        if (isMounted && finalTracks && finalTracks.length > 0) {
+          const seen = new Set<string>();
+          const dedupedTracks = finalTracks.filter(t => {
+            if (!isRecentTrack(t, 6)) return false;
+            const key = `${t.title?.toLowerCase().trim()}|${t.artist?.toLowerCase().trim()}`;
+            const idKey = t.id.toString();
+            if (seen.has(key) || seen.has(idKey)) return false;
+            seen.add(key);
+            seen.add(idKey);
+            return true;
+          });
+          setNewReleasesTracks(dedupedTracks);
+        }
+      } catch (e) {
+        console.error('Failed to fetch new releases', e);
+      }
+    };
+    
+    if (activeRegion) {
+      void fetchNewReleases();
+    }
+
     return () => { isMounted = false; };
   }, [activeRegion, subRegion, musicStyle, countryLoading, regionUrlMap, trendingCache]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('tabPress', (e) => {
+      setCurrentView('home');
+      clearResults();
+    });
+    return unsubscribe;
+  }, [navigation, clearResults]);
 
   const handleViewChange = (view: 'home' | 'search') => {
     setCurrentView(view);
@@ -561,7 +643,11 @@ export default function HomeScreen() {
                   ))}
                 </ScrollView>
 
-                {trendingTracks.length > 0 ? (
+                {isTrendingLoading ? (
+                  <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 8, marginBottom: 16 }}>
+                    {t('home.loading_trending')}
+                  </Text>
+                ) : trendingTracks.length > 0 ? (
                   <HorizontalTrackList
                     title=""
                     tracks={trendingTracks}
@@ -570,14 +656,27 @@ export default function HomeScreen() {
                     currentTrack={currentTrack}
                   />
                 ) : (
-                  Object.keys(regionUrlMap).length > 0 && (
-                    <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 8, marginBottom: 16 }}>
-                      {t('home.loading_trending')}
-                    </Text>
-                  )
+                  <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 8, marginBottom: 16 }}>
+                    No tracks found for this filter.
+                  </Text>
                 )}
               </View>
             )}
+
+            {newReleasesTracks.length > 0 && (
+              <View style={{ marginTop: 16 }}>
+                <SectionHeader title={t('home.new_releases') !== 'home.new_releases' ? t('home.new_releases') : 'New Releases'} />
+                <HorizontalTrackList
+                  title=""
+                  tracks={newReleasesTracks}
+                  onTrackSelect={handleHomeTrackSelect}
+                  isPlaying={isPlaying}
+                  currentTrack={currentTrack}
+                />
+              </View>
+            )}
+
+
 
             <View style={{ marginTop: 16 }}>
               <SectionHeader title={t('home.liked_songs')} onSeeAll={handleLibraryNav} />

@@ -39,6 +39,8 @@ interface TopBarProps {
   searchState: UseSearchReturn;
   placeholderFontSize?: number;
   autoFocus?: boolean;
+  isListening?: boolean;
+  onVoiceSearch?: () => void;
 }
 
 export function TopBar({
@@ -49,6 +51,8 @@ export function TopBar({
   searchState,
   placeholderFontSize = 16,
   autoFocus,
+  isListening,
+  onVoiceSearch,
 }: TopBarProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme !== 'light';
@@ -156,6 +160,19 @@ export function TopBar({
                     onPress={() => handleSearchChange('')}
                   >
                     <Ionicons name="close-circle" size={20} color={isDark ? '#888' : '#8a6e5a'} />
+                  </TouchableOpacity>
+                )}
+                {onVoiceSearch && currentView === 'search' && (
+                  <TouchableOpacity
+                    style={styles.micButton}
+                    onPress={onVoiceSearch}
+                    disabled={isListening}
+                  >
+                    <Ionicons
+                      name="mic"
+                      size={20}
+                      color={isListening ? '#ff4444' : (isDark ? '#888' : '#8a6e5a')}
+                    />
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity
@@ -324,6 +341,10 @@ const styles = StyleSheet.create({
     height: 40,
   },
   clearButton: {
+    marginLeft: 8,
+    padding: 2,
+  },
+  micButton: {
     marginLeft: 8,
     padding: 2,
   },

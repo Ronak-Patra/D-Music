@@ -9,15 +9,17 @@ import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PlaylistStorage } from '@/lib/playlist-storage';
-import { Track } from '@/types/music';
 import { useLikedSongs } from '@/hooks/useLikedSongs';
+import { PlaylistList } from '@/components/PlaylistList';
 import { MusicAPI } from '@/lib/music-api';
+import { DownloadManager } from '@/lib/download-manager';
 import { MusicPlayerContext } from './_layout';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useTranslation } from 'react-i18next';
 import { useConnectivity } from '@/hooks/useConnectivity';
+import { useRouter } from 'expo-router';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -170,6 +172,7 @@ function CollapsibleSection({
 
 export default function DownloadsScreen() {
   const { t } = useTranslation();
+  const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme !== 'light';
   const { isOffline } = useConnectivity();
@@ -184,6 +187,8 @@ export default function DownloadsScreen() {
   }), [isDark]);
 
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [offlinePlaylists, setOfflinePlaylists] = useState<any[]>([]);
+  const [offlinePlaylistCovers, setOfflinePlaylistCovers] = useState<Record<string, string>>({});
   const [thumbMap, setThumbMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -194,6 +199,7 @@ export default function DownloadsScreen() {
   const [showSortMenu, setShowSortMenu] = useState(false);
 
   // Collapsible state
+  const [playlistsCollapsed, setPlaylistsCollapsed] = useState(false);
   const [downloadedCollapsed, setDownloadedCollapsed] = useState(true);
   const [localCollapsed, setLocalCollapsed] = useState(true);
 
@@ -307,10 +313,31 @@ export default function DownloadsScreen() {
       setTracks(valid.map(e => e.meta.trackData));
 
       const newThumbMap: Record<string, string> = {};
-      for (const { id, meta } of valid) {
-        if (meta.thumbUri) newThumbMap[id] = meta.thumbUri;
-      }
       setThumbMap(newThumbMap);
+
+      // Find downloaded playlists
+      try {
+        const downloadedPlaylistNames = await DownloadManager.getDownloadedPlaylists();
+        const validPlaylists = [];
+        const playlistCovers: Record<string, string> = {};
+        
+        for (const name of downloadedPlaylistNames) {
+            const count = await DownloadManager.getPlaylistTrackCount(name);
+            validPlaylists.push({
+                name,
+                trackIds: [], // We don't have this right away
+                trackCount: count
+            });
+            // Try to find a cover from newThumbMap or use default
+            playlistCovers[name] = 'https://misc.scdn.co/liked-songs/liked-songs-640.png';
+        }
+        
+        setOfflinePlaylists(validPlaylists);
+        setOfflinePlaylistCovers(playlistCovers);
+      } catch (e) {
+        console.error("Failed to load downloaded playlists", e);
+      }
+
     } finally {
       setLoading(false);
     }
@@ -371,6 +398,18 @@ export default function DownloadsScreen() {
     handleTrackSelect(shuffled[0], shuffled, 0);
   }, [displayedTracks, handleTrackSelect]);
 
+  const handlePlaylistPlay = async (playlist: any, shuffle = false) => {
+    const tracks = await PlaylistStorage.getPlaylistTracks(playlist);
+    const offlineT = tracks.filter(t => thumbMap[t.id.toString()] || displayedTracks.find(dt => dt.id.toString() === t.id.toString()));
+    if (offlineT.length > 0) {
+      let playTracks = offlineT;
+      if (shuffle) {
+        playTracks = [...offlineT].sort(() => Math.random() - 0.5);
+      }
+      handleTrackSelect(playTracks[0], playTracks, 0);
+    }
+  };
+
   const handlePlayAll = useCallback(() => {
     if (displayedTracks.length > 0) {
       handleTrackSelect(displayedTracks[0], displayedTracks, 0);
@@ -408,6 +447,32 @@ export default function DownloadsScreen() {
       ]
     );
   }, [deleteTrack, t]);
+
+  const handleDeletePlaylist = useCallback((playlist: any) => {
+    Alert.alert(
+      'Delete Downloaded Playlist',
+      `Are you sure you want to delete "${playlist.name}" and all its downloaded songs?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const masterUri = await DownloadManager.getMasterFolderUri();
+              if (masterUri) {
+                const targetDirUri = await DownloadManager.ensureDirectoryExists(masterUri, playlist.name.replace(/[^a-zA-Z0-9 -]/g, '').trim());
+                await FileSystem.deleteAsync(targetDirUri, { idempotent: true });
+                setOfflinePlaylists(prev => prev.filter(p => p.name !== playlist.name));
+              }
+            } catch (e) {
+              Alert.alert('Error', 'Failed to delete playlist folder.');
+            }
+          }
+        }
+      ]
+    );
+  }, []);
 
   const handleDeleteSelected = useCallback(() => {
     Alert.alert(
@@ -496,6 +561,11 @@ export default function DownloadsScreen() {
   const toggleDownloadedCollapsed = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setDownloadedCollapsed(v => !v);
+  }, []);
+
+  const togglePlaylistsCollapsed = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setPlaylistsCollapsed(v => !v);
   }, []);
 
   const toggleLocalCollapsed = useCallback(() => {
@@ -637,6 +707,42 @@ export default function DownloadsScreen() {
           </View>
         ) : (
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+            {/* Downloaded Playlists Section */}
+            {offlinePlaylists.length > 0 && (
+              <CollapsibleSection
+                title="Downloaded Playlists"
+                count={offlinePlaylists.length}
+                collapsed={playlistsCollapsed}
+                onToggle={togglePlaylistsCollapsed}
+                accent={theme.accent}
+                textPrimary={theme.textPrimary}
+                surface={theme.surface}
+                border={theme.border}
+              >
+                <PlaylistList
+                  playlists={offlinePlaylists.map(pl => ({
+                    ...pl,
+                    cover: offlinePlaylistCovers[pl.name] || pl.cover,
+                  }))}
+                  onPlaylistPress={(pl) => {
+                    router.push(`/media/playlist/${pl.name}?title=${encodeURIComponent(pl.name)}&offline=true`);
+                  }}
+                  onPlaylistPlay={pl => handlePlaylistPlay(pl, false)}
+                  onPlaylistShuffle={pl => handlePlaylistPlay(pl, true)}
+                  onPlaylistLongPress={handleDeletePlaylist}
+                  onPlaylistDelete={handleDeletePlaylist}
+                  theme={{
+                    surface: theme.surface,
+                    border: theme.border,
+                    textPrimary: theme.textPrimary,
+                    textSecondary: theme.textSecondary,
+                    accent: theme.accent,
+                    icon: theme.textPrimary
+                  }}
+                />
+              </CollapsibleSection>
+            )}
+
             {/* Downloaded Songs Section */}
             {downloadedTracks.length > 0 && (
               <CollapsibleSection

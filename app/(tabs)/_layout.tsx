@@ -330,7 +330,8 @@ export default function TabLayout() {
                 left: 0,
                 right: 0,
                 bottom: 50 + insets.bottom,
-                zIndex: 100,
+                zIndex: 9999,
+                elevation: 9999,
               }}
             >
               <Player

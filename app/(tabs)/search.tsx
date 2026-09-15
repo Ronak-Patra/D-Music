@@ -7,7 +7,8 @@ import { TopBar } from '@/components/TopBar';
 import { SearchResults } from '@/components/SearchResults';
 import { MusicPlayerContext } from './_layout';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -38,17 +39,48 @@ export default function SearchScreen() {
     searchTracks(q, type as 'track' | 'album' | 'artist' | 'playlist');
   }, [params.q, params.type, setQuery, setSearchType, searchTracks]);
 
+  const navigation = useNavigation();
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('tabPress', (e) => {
+      setQuery('');
+      searchState.clearResults();
+    });
+    return unsubscribe;
+  }, [navigation, setQuery, searchState]);
+
   const [isListening, setIsListening] = React.useState(false);
 
-  const startListening = () => {
-    setIsListening(true);
-    // Mock listening for 3 seconds
-    setTimeout(() => {
-      setIsListening(false);
-      setQuery('Despacito'); // Mock recognized song
+  useSpeechRecognitionEvent("start", () => setIsListening(true));
+  useSpeechRecognitionEvent("end", () => setIsListening(false));
+  useSpeechRecognitionEvent("result", (event) => {
+    if (event.results[0]?.transcript) {
+      const text = event.results[0].transcript;
+      setQuery(text);
       setSearchType('track');
-      searchTracks('Despacito', 'track');
-    }, 3000);
+      searchTracks(text, 'track');
+    }
+  });
+  useSpeechRecognitionEvent("error", (event) => {
+    console.error('Speech error', event.error, event.message);
+    setIsListening(false);
+  });
+
+  const startListening = async () => {
+    const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!perm.granted) {
+      console.warn('Speech permissions denied');
+      return;
+    }
+    try {
+      ExpoSpeechRecognitionModule.start({
+        lang: 'en-US',
+        interimResults: false,
+        continuous: false,
+      });
+    } catch (e) {
+      console.error('Voice start error:', e);
+      setIsListening(false);
+    }
   };
 
   return (
@@ -61,6 +93,8 @@ export default function SearchScreen() {
         onSearchStart={() => {}}
         searchState={searchState}
         placeholderFontSize={SCREEN_WIDTH > 400 ? 18 : 15}
+        isListening={isListening}
+        onVoiceSearch={startListening}
       />
       <View style={styles.mainContent}>
         <SearchResults
@@ -71,16 +105,7 @@ export default function SearchScreen() {
           currentTrack={currentTrack}
         />
       </View>
-      
-      {/* Music Recognition FAB */}
-      <TouchableOpacity 
-        style={[styles.fab, { backgroundColor: isListening ? '#ff4444' : '#1DB954' }]} 
-        onPress={startListening}
-        disabled={isListening}
-      >
-        <Ionicons name={isListening ? "mic" : "musical-notes"} size={28} color="#fff" />
-      </TouchableOpacity>
-      
+      {/* Music Recognition removed from FAB to TopBar */}
       {isListening && (
         <View style={styles.listeningOverlay}>
           <Ionicons name="pulse" size={64} color="#1DB954" />
@@ -100,21 +125,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 2,
   },
-  fab: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
+
   listeningOverlay: {
     position: 'absolute',
     top: 0,

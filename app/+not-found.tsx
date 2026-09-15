@@ -9,8 +9,13 @@ export default function NotFoundScreen() {
   const router = useRouter();
 
   useEffect(() => {
-    // Automatically redirect to home immediately and silently
-    router.replace('/');
+    // Prevent wiping out navigation state if opened via notification
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      // Use push instead of replace to preserve any underlying state if possible
+      router.push('/');
+    }
   }, [router]);
 
   return null;
