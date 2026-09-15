@@ -11,10 +11,12 @@ import { MusicAPI } from '@/lib/music-api';
 import { useFocusEffect } from 'expo-router';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useTranslation } from 'react-i18next';
-import { useRouter } from 'expo-router';
+import { useRouter, useNavigation } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
+import * as FileSystem from 'expo-file-system';
 import { importSpotifyPlaylist } from '@/lib/spotify-import';
+import { DownloadManager } from '@/lib/download-manager';
 
 export default function LibraryScreen() {
   const { t } = useTranslation();
@@ -40,6 +42,7 @@ export default function LibraryScreen() {
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
   const [playlistTracks, setPlaylistTracks] = useState<any[]>([]);
   const [showLikedSongs, setShowLikedSongs] = useState(false);
+  const [showLikedPlaylists, setShowLikedPlaylists] = useState(false);
   const [savedMedia, setSavedMedia] = useState<any[]>([]);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importUrl, setImportUrl] = useState('');
@@ -100,11 +103,14 @@ export default function LibraryScreen() {
   }, []);
 
   useFocusEffect(
-    React.useCallback(() => {
-      fetchPlaylists();
+    useCallback(() => {
       fetchSavedMedia();
-    }, [fetchPlaylists, fetchSavedMedia])
+    }, [fetchSavedMedia])
   );
+
+  useEffect(() => {
+    fetchPlaylists();
+  }, [fetchPlaylists]);
 
   const handlePlaylistPress = async (playlist: Playlist) => {
     await refreshSelectedPlaylistTracks(playlist.name);
@@ -155,8 +161,18 @@ export default function LibraryScreen() {
   const handleBackToLibrary = () => {
     setSelectedPlaylist(null);
     setShowLikedSongs(false);
+    setShowLikedPlaylists(false);
     setPlaylistTracks([]);
   };
+
+  const navigation = useNavigation();
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('tabPress', (e) => {
+      // Reset state to default root view
+      handleBackToLibrary();
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const handleRemoveTrackFromPlaylist = async (trackId: string, playlistName: string) => {
     await PlaylistStorage.removeTrackFromPlaylist(trackId, playlistName);
@@ -201,6 +217,33 @@ export default function LibraryScreen() {
         }
       ]
     );
+  };
+
+  const handleDownloadPlaylist = async (playlist: Playlist) => {
+    try {
+      const tracks = await PlaylistStorage.getPlaylistTracks(playlist);
+      if (tracks.length === 0) {
+        Alert.alert('Empty Playlist', 'There are no tracks to download.');
+        return;
+      }
+      
+      const downloadedCount = await DownloadManager.downloadPlaylist(
+        playlist.name,
+        tracks,
+        (progress) => {
+           // We can log progress or update UI
+        }
+      );
+      
+      if (downloadedCount > 0) {
+          Alert.alert('Download Complete', `${downloadedCount} tracks saved to your folder.`);
+      } else {
+          Alert.alert('No Downloads', 'No new tracks were downloaded. (Did you cancel the folder selection?)');
+      }
+    } catch (e) {
+      console.error('Failed to download playlist:', e);
+      Alert.alert('Download Error', 'Failed to download playlist.');
+    }
   };
 
   return (
@@ -287,6 +330,36 @@ export default function LibraryScreen() {
             initialNumToRender={12}
           />
         </View>
+      ) : showLikedPlaylists ? (
+        <View style={[styles.scrollContent, { flex: 1 }]}> 
+          <TouchableOpacity onPress={handleBackToLibrary} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={22} color={theme.textPrimary} />
+            <Text style={{ color: theme.textPrimary, fontSize: 16, marginLeft: 4 }}>{t('components.back_to_library')}</Text>
+          </TouchableOpacity>
+          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Liked Playlists</Text>
+          <ScrollView contentContainerStyle={{ paddingHorizontal: 16 }}>
+            <View style={styles.savedMediaGrid}>
+              {savedMedia.filter(m => m.type === 'playlist' || m.type === 'playlists').map((item) => (
+                <TouchableOpacity
+                  key={`saved_${item.type}_${item.id}`}
+                  style={[styles.savedMediaItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                  onPress={() => handleSavedMediaPress(item)}
+                  onLongPress={() => handleRemoveSavedMedia(`saved_${item.type}_${item.id}`)}
+                >
+                  <Image source={{ uri: item.image }} style={styles.savedMediaImage} contentFit="cover" />
+                  <Text style={[styles.savedMediaTitle, { color: theme.textPrimary }]} numberOfLines={2}>{item.title}</Text>
+                  <Text style={[styles.savedMediaMeta, { color: theme.textSecondary }]}>{t(`media.${item.type}`)}</Text>
+                  <TouchableOpacity
+                    style={styles.savedMediaRemove}
+                    onPress={() => handleRemoveSavedMedia(`saved_${item.type}_${item.id}`)}
+                  >
+                    <Ionicons name="close-circle" size={20} color="#ff4444" />
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+        </View>
       ) : !selectedPlaylist ? (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{t('components.your_library')}</Text>
@@ -299,13 +372,25 @@ export default function LibraryScreen() {
             onPress={() => setShowLikedSongs(true)}
             onShuffle={() => handleLikedSongsPlay(true)}
             onPlay={() => handleLikedSongsPlay(false)}
+            onDownload={() => {}}
             theme={{ surface: theme.surface, border: theme.border, textPrimary: theme.textPrimary, textSecondary: theme.textSecondary, accent: theme.accent, icon: theme.textPrimary }}
           />
-          {savedMedia.length > 0 && (
+          <PlaylistCard
+            playlist={{
+              name: 'Liked Playlists',
+              cover: savedMedia.find(m => m.type === 'playlist' || m.type === 'playlists')?.image || 'https://misc.scdn.co/liked-songs/liked-songs-640.png',
+              trackCount: savedMedia.filter(m => m.type === 'playlist' || m.type === 'playlists').length,
+            }}
+            onPress={() => setShowLikedPlaylists(true)}
+            onShuffle={() => {}}
+            onPlay={() => {}}
+            theme={{ surface: theme.surface, border: theme.border, textPrimary: theme.textPrimary, textSecondary: theme.textSecondary, accent: theme.accent, icon: theme.textPrimary }}
+          />
+          {savedMedia.filter(m => m.type !== 'playlist' && m.type !== 'playlists').length > 0 && (
             <>
               <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{t('library.saved')}</Text>
               <View style={styles.savedMediaGrid}>
-                {savedMedia.map((item) => (
+                {savedMedia.filter(m => m.type !== 'playlist' && m.type !== 'playlists').map((item) => (
                   <TouchableOpacity
                     key={`saved_${item.type}_${item.id}`}
                     style={[styles.savedMediaItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
@@ -337,6 +422,7 @@ export default function LibraryScreen() {
             onPlaylistPlay={pl => handlePlaylistPlay(pl, false)}
             onPlaylistLongPress={handleDeletePlaylist}
             onPlaylistDelete={handleDeletePlaylist}
+            onPlaylistDownload={handleDownloadPlaylist}
             theme={{ surface: theme.surface, border: theme.border, textPrimary: theme.textPrimary, textSecondary: theme.textSecondary, accent: theme.accent, icon: theme.textPrimary }}
           />
           <TouchableOpacity style={[styles.createButton, { backgroundColor: theme.surface, borderColor: theme.border }]} onPress={handleCreatePlaylist}>
@@ -373,6 +459,7 @@ export default function LibraryScreen() {
             onPress={() => {}}
             onShuffle={() => handlePlaylistPlay(selectedPlaylist, true)}
             onPlay={() => handlePlaylistPlay(selectedPlaylist, false)}
+            onDownload={() => handleDownloadPlaylist(selectedPlaylist)}
             theme={{ surface: theme.surface, border: theme.border, textPrimary: theme.textPrimary, textSecondary: theme.textSecondary, accent: theme.accent, icon: theme.textPrimary }}
           />
           <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{t('components.tracks')}</Text>

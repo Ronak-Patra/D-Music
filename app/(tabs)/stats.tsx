@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { getStats, getHistory, PlaybackStats, HistoryEntry } from '@/lib/stats-tracker';
 import { Image } from 'expo-image';
@@ -31,9 +32,11 @@ export default function StatsScreen() {
     setHistory(h);
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);

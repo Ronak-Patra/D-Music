@@ -42,6 +42,8 @@ const LANGUAGE_KEY = 'openspot_language_v1';
 const PROVIDER_KEY = 'openspot_provider_v1';
 const TRENDING_ENABLED_KEY = 'openspot_trending_enabled_v1';
 const ROTATING_COVER_KEY = 'openspot_rotating_cover_v1';
+const GESTURES_ENABLED_KEY = 'openspot_gestures_enabled_v1';
+import { DeviceEventEmitter } from 'react-native';
 
 interface PlatformUpdateConfig {
   latest_version: string;
@@ -70,6 +72,7 @@ export default function SettingsScreen() {
   const [provider, setProvider] = useState<string>('saavn');
   const [trendingEnabled, setTrendingEnabled] = useState<boolean>(true);
   const [rotatingCover, setRotatingCover] = useState<boolean>(true);
+  const [gesturesEnabled, setGesturesEnabled] = useState<boolean>(true);
   const { dynamicColorsEnabled, toggleDynamicColors } = useContext(MusicPlayerContext);
   const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
   const [isRegionModalOpen, setIsRegionModalOpen] = useState(false);
@@ -194,12 +197,13 @@ export default function SettingsScreen() {
 
     const loadAllSettings = async () => {
       try {
-        const [storedRegion, storedLanguage, storedProvider, storedTrending, storedRotating, cachedMap] = await Promise.all([
+        const [storedRegion, storedLanguage, storedProvider, storedTrending, storedRotating, storedGestures, cachedMap] = await Promise.all([
           AsyncStorage.getItem(REGION_OVERRIDE_KEY),
           AsyncStorage.getItem(LANGUAGE_KEY),
           AsyncStorage.getItem(PROVIDER_KEY),
           AsyncStorage.getItem(TRENDING_ENABLED_KEY),
           AsyncStorage.getItem(ROTATING_COVER_KEY),
+          AsyncStorage.getItem(GESTURES_ENABLED_KEY),
           AsyncStorage.getItem(REGION_URL_MAP_KEY),
         ]);
 
@@ -213,6 +217,7 @@ export default function SettingsScreen() {
         if (storedProvider && storedProvider.trim()) setProvider(storedProvider);
         if (storedTrending !== null) setTrendingEnabled(storedTrending === 'true');
         if (storedRotating !== null) setRotatingCover(storedRotating === 'true');
+        if (storedGestures !== null) setGesturesEnabled(storedGestures === 'true');
 
         if (cachedMap) {
           const parsed = JSON.parse(cachedMap);
@@ -300,6 +305,16 @@ export default function SettingsScreen() {
       await AsyncStorage.setItem(TRENDING_ENABLED_KEY, String(enabled));
     } catch (error) {
       console.error('Failed to save trending setting:', error);
+    }
+  };
+
+  const handleGesturesToggle = async (enabled: boolean) => {
+    setGesturesEnabled(enabled);
+    try {
+      await AsyncStorage.setItem(GESTURES_ENABLED_KEY, String(enabled));
+      DeviceEventEmitter.emit('onGesturesSettingChanged', enabled);
+    } catch (error) {
+      console.error('Failed to save gestures setting:', error);
     }
   };
 
@@ -393,6 +408,22 @@ export default function SettingsScreen() {
               activeOpacity={0.8}
             >
               <View style={[styles.toggleThumb, rotatingCover && styles.toggleThumbOn]} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.cardTitle, { color: theme.textPrimary, marginBottom: 2 }]}>Swipe Gestures</Text>
+              <Text style={[styles.cardText, { color: theme.textSecondary }]}>Enable left/right swipe to skip tracks in the full screen player</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.toggleTrack, { backgroundColor: gesturesEnabled ? theme.accent : theme.surfaceElevated }]}
+              onPress={() => handleGesturesToggle(!gesturesEnabled)}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.toggleThumb, gesturesEnabled && styles.toggleThumbOn]} />
             </TouchableOpacity>
           </View>
         </View>

@@ -15,6 +15,9 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
+import { DownloadManager } from '@/lib/download-manager';
+import { PlaylistStorage } from '@/lib/playlist-storage';
 
 import { MusicAPI } from '@/lib/music-api';
 import { Track } from '@/types/music';
@@ -115,6 +118,7 @@ export default function MediaDetailsScreen() {
   const title = normalizeParam(params.title) || 'Details';
   const coverImage = normalizeParam(params.image) || '';
   const fromPath = normalizeParam(params.from);
+  const isOfflineMode = normalizeParam(params.offline) === 'true';
 
   const [tracks, setTracks] = useState<Track[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -124,6 +128,7 @@ export default function MediaDetailsScreen() {
   const [hasMoreSongs, setHasMoreSongs] = useState(true);
   const [totalSongs, setTotalSongs] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const { handleTrackSelect, musicQueue, currentTrack, isPlaying } = useContext(MusicPlayerContext);
   const { isLiked, toggleLike } = useLikedSongs();
@@ -162,21 +167,42 @@ export default function MediaDetailsScreen() {
       setTotalSongs(0);
       try {
         let fetchedTracks: Track[] = [];
-        if (mediaType === 'album') {
-          fetchedTracks = await MusicAPI.getAlbumSongs(mediaId);
-          setTotalSongs(fetchedTracks.length);
-        } else if (mediaType === 'artist') {
-          const result = await MusicAPI.getArtistSongs(mediaId, 0);
-          fetchedTracks = result.tracks;
-          const total = result.total > 0 ? result.total : fetchedTracks.length;
-          setTotalSongs(total);
-          setHasMoreSongs(total > fetchedTracks.length);
+
+        if (isOfflineMode && mediaId) {
+            // In offline mode, mediaId acts as the playlist name
+            const masterUri = await DownloadManager.getMasterFolderUri();
+            if (masterUri) {
+                const safePlaylistName = mediaId.replace(/[^a-zA-Z0-9 -]/g, '').trim();
+                const targetDirUri = await DownloadManager.ensureDirectoryExists(masterUri, safePlaylistName);
+                const files = await FileSystem.StorageAccessFramework.readDirectoryAsync(targetDirUri);
+                const metaUri = files.find(u => u.endsWith('playlist.json'));
+                if (metaUri) {
+                    const metaData = await FileSystem.readAsStringAsync(metaUri);
+                    const parsed = JSON.parse(metaData);
+                    if (parsed.tracks) {
+                        fetchedTracks = parsed.tracks;
+                    }
+                }
+            }
+            setTotalSongs(fetchedTracks.length);
+            setHasMoreSongs(false);
         } else {
-          const result = await MusicAPI.getPlaylistSongsPaginated(mediaId, 0);
-          fetchedTracks = result.tracks;
-          const total = result.total > 0 ? result.total : fetchedTracks.length;
-          setTotalSongs(total);
-          setHasMoreSongs(total > fetchedTracks.length);
+            if (mediaType === 'album') {
+              fetchedTracks = await MusicAPI.getAlbumSongs(mediaId);
+              setTotalSongs(fetchedTracks.length);
+            } else if (mediaType === 'artist') {
+              const result = await MusicAPI.getArtistSongs(mediaId, 0);
+              fetchedTracks = result.tracks;
+              const total = result.total > 0 ? result.total : fetchedTracks.length;
+              setTotalSongs(total);
+              setHasMoreSongs(total > fetchedTracks.length);
+            } else {
+              const result = await MusicAPI.getPlaylistSongsPaginated(mediaId, 0);
+              fetchedTracks = result.tracks;
+              const total = result.total > 0 ? result.total : fetchedTracks.length;
+              setTotalSongs(total);
+              setHasMoreSongs(total > fetchedTracks.length);
+            }
         }
 
         if (isMounted) {
@@ -204,7 +230,7 @@ export default function MediaDetailsScreen() {
     return () => {
       isMounted = false;
     };
-  }, [mediaId, mediaType]);
+  }, [mediaId, mediaType, isOfflineMode]);
 
   const handlePlayAll = () => {
     if (tracks.length > 0) {
@@ -234,6 +260,32 @@ export default function MediaDetailsScreen() {
         totalSongs,
       }));
       setIsSaved(true);
+    }
+  };
+
+  const handleDownloadPlaylist = async () => {
+    if (tracks.length === 0) return;
+    setIsDownloading(true);
+    try {
+      const downloadedCount = await DownloadManager.downloadPlaylist(
+        title,
+        tracks,
+        (progress) => {
+           // We can log progress or update UI
+        }
+      );
+      
+      if (downloadedCount > 0) {
+          alert(`Download complete! ${downloadedCount} tracks saved to your folder.`);
+      } else {
+          // If 0, it means it was already downloaded or user cancelled.
+          alert('No new tracks were downloaded. (Did you cancel the folder selection?)');
+      }
+    } catch (e) {
+      console.error('Failed to download media:', e);
+      alert('Failed to download media.');
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -321,9 +373,18 @@ export default function MediaDetailsScreen() {
         <Text style={[styles.headerTitle, { color: theme.textPrimary }]} numberOfLines={1}>
           {title}
         </Text>
-        <TouchableOpacity onPress={handleToggleSave} style={styles.backButton}>
-          <Ionicons name={isSaved ? 'heart' : 'heart-outline'} size={24} color={isSaved ? theme.accent : theme.icon} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row' }}>
+          <TouchableOpacity onPress={handleDownloadPlaylist} style={styles.backButton} disabled={isDownloading || tracks.length === 0}>
+            {isDownloading ? (
+              <ActivityIndicator size="small" color={theme.accent} />
+            ) : (
+              <Ionicons name="download-outline" size={24} color={theme.icon} />
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleToggleSave} style={styles.backButton}>
+            <Ionicons name={isSaved ? 'heart' : 'heart-outline'} size={24} color={isSaved ? theme.accent : theme.icon} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={[styles.heroCard, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>

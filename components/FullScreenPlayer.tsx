@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   AppState,
   useWindowDimensions,
   PanResponder,
+  DeviceEventEmitter,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Slider } from '@sharcoux/slider';
@@ -39,6 +40,7 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 
 const ROTATING_COVER_KEY = 'openspot_rotating_cover_v1';
+const GESTURES_ENABLED_KEY = 'openspot_gestures_enabled_v1';
 
 const ANIMATION_DURATION = 500;
 const SUCCESS_TOAST_DURATION = 2000;
@@ -86,7 +88,7 @@ interface FullScreenPlayerProps {
   onPlaylistsUpdated?: () => void;
 }
 
-export function FullScreenPlayer({
+export const FullScreenPlayer = memo(function FullScreenPlayer({
   isOpen,
   onClose,
   track,
@@ -151,6 +153,7 @@ export function FullScreenPlayer({
 
   const [repeatMode, setRepeatMode] = useState<RepeatMode>(RepeatMode.Off);
   const [rotatingCover, setRotatingCover] = useState<boolean>(true);
+  const [gesturesEnabled, setGesturesEnabled] = useState<boolean>(true);
 
   const albumScaleAnim = useRef(new Animated.Value(1)).current;
   const likeScaleAnim = useRef(new Animated.Value(1)).current;
@@ -268,11 +271,21 @@ export function FullScreenPlayer({
         if (stored !== null) {
           setRotatingCover(stored === 'true');
         }
+        const storedGestures = await AsyncStorage.getItem(GESTURES_ENABLED_KEY);
+        if (storedGestures !== null) {
+          setGesturesEnabled(storedGestures === 'true');
+        }
       } catch (error) {
-        console.error('Failed to load rotating cover setting:', error);
+        console.error('Failed to load settings:', error);
       }
     };
     loadRotatingCover();
+
+    const sub = DeviceEventEmitter.addListener('onGesturesSettingChanged', (enabled: boolean) => {
+      setGesturesEnabled(enabled);
+    });
+
+    return () => sub.remove();
   }, []);
 
   useEffect(() => {
@@ -747,11 +760,11 @@ export function FullScreenPlayer({
     );
   })();
 
-  const panResponder = useRef(
+  const panResponderRef = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (evt, gestureState) => {
-        // Only set the PanResponder if the user swipes horizontally significantly
+        // We evaluate gesturesEnabled right away
         return Math.abs(gestureState.dx) > 10;
       },
       onPanResponderRelease: (evt, gestureState) => {
@@ -768,7 +781,7 @@ export function FullScreenPlayer({
     <Modal
       visible={isOpen}
       animationType="slide"
-      presentationStyle="fullScreen"
+      transparent={true}
       onRequestClose={onClose}
     >
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -786,6 +799,7 @@ export function FullScreenPlayer({
               source={{ uri: (track as any).offlineThumbUri || MusicAPI.getOptimalImage(track.images) || 'https://via.placeholder.com/400x400/1e1e1e/b3b3b3?text=No+Cover' }}
               style={styles.backgroundImage}
               contentFit="cover"
+              transition={500}
             />
             <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={styles.blurOverlay} />
             <LinearGradient
@@ -846,7 +860,7 @@ export function FullScreenPlayer({
             ]}>
               {/* Album Art Container with PanResponder */}
               <View 
-                {...panResponder.panHandlers}
+                {...(gesturesEnabled ? panResponderRef.panHandlers : {})}
                 style={[
                   styles.albumArtContainer,
                   isLandscape && { width: albumSize, height: albumSize, marginBottom: 0, flexShrink: 0 },
@@ -874,6 +888,7 @@ export function FullScreenPlayer({
                       source={{ uri: (track as any).offlineThumbUri || MusicAPI.getOptimalImage(track.images) || 'https://via.placeholder.com/400x400/1e1e1e/b3b3b3?text=No+Cover' }}
                       style={styles.albumArt}
                       contentFit="cover"
+                      transition={300}
                     />
                   </Animated.View>
                 </Animated.View>
@@ -1006,11 +1021,14 @@ export function FullScreenPlayer({
                   </Animated.View>
                 </View>
 
-                {/* --- FIX 2: Bottom buttons — always evenly spaced row, no overflow --- */}
-                <View style={[
-                  styles.bottomControls,
-                  isLandscape ? styles.bottomControlsLandscape : styles.bottomControlsPortrait,
-                ]}>
+                {/* --- FIX 2: Bottom buttons — wrapped view to prevent overflow --- */}
+                <View
+                  style={[
+                    styles.bottomControls,
+                    isLandscape ? styles.bottomControlsLandscape : styles.bottomControlsPortrait,
+                    { width: '100%', flexGrow: 0, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }
+                  ]}
+                >
                   <TouchableOpacity
                     onPress={handleRepeatToggle}
                     style={styles.miniButtonWithText}
@@ -1087,6 +1105,7 @@ export function FullScreenPlayer({
                       Info
                     </Text>
                   </TouchableOpacity>
+                  
                   <TouchableOpacity
                     onPress={() => setShowSleepTimerModal(true)}
                     style={styles.miniButtonWithText}
@@ -1120,7 +1139,7 @@ export function FullScreenPlayer({
       </GestureHandlerRootView>
     </Modal>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -1279,16 +1298,16 @@ const styles = StyleSheet.create({
   bottomControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-evenly',
-    width: '100%',
+    justifyContent: 'flex-start',
+    gap: 8,
   },
   bottomControlsPortrait: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 16,
     paddingBottom: 12,
     marginTop: 4,
   },
   bottomControlsLandscape: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 16,
     paddingBottom: 4,
     marginTop: 4,
   },

@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { Track } from '../types/music';
 import { PlaylistStorage } from '@/lib/playlist-storage';
+import { DownloadManager } from '@/lib/download-manager';
 import { useTranslation } from 'react-i18next';
 import { MusicAPI } from '../lib/music-api';
 
@@ -167,36 +168,11 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({
       downloadingTrackIds.add(track.id.toString());
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-      await ensureDirectoryExists();
+      const success = await DownloadManager.downloadTrack(track);
 
-      const trackIdStr = track.id.toString();
-      const audioUrl = await MusicAPI.getDownloadUrl(trackIdStr, track);
-      const fileUri = getOfflineFilePath('mp3');
-
-      downloadRef.current = FileSystem.createDownloadResumable(audioUrl, fileUri, { sessionType: FileSystem.FileSystemSessionType.BACKGROUND });
-      const result = await downloadRef.current.downloadAsync();
-
-      if (!result || !result.uri) {
+      if (!success) {
         throw new Error('Download failed or was cancelled');
       }
-
-      const thumbUri = getOfflineFilePath('jpg');
-      try {
-        if (track.images?.large) {
-          await FileSystem.downloadAsync(track.images.large, thumbUri);
-        } else {
-          console.warn('No thumbnail URL found for this track, skipping thumbnail download.');
-        }
-      } catch (e) {
-        console.warn('Thumbnail download failed, continuing without it:', e);
-      }
-
-      await AsyncStorage.setItem(`offline_${track.id}`, JSON.stringify({
-        fileUri: result.uri,
-        thumbUri: track.images?.large ? thumbUri : null,
-        trackData: track,
-        downloadedAt: new Date().toISOString(),
-      }));
 
       await PlaylistStorage.addTrackToPlaylists(track, ['offline']);
 
@@ -204,15 +180,8 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({
       showNotification(t('components.downloaded') || 'Downloaded', 'success'); 
 
       if (onDownloaded) {
-        onDownloaded(result.uri);
-      }
-
-      // Automatically trigger custom download exporter to public folder
-      try {
-        const { exportDownloadedTrack } = require('@/lib/export-downloads');
-        await exportDownloadedTrack(result.uri, `${track.title} - ${track.artist}.mp3`);
-      } catch (exportError) {
-        console.warn('Auto-export to public folder failed:', exportError);
+        // Since we are using SAF, the URI is managed internally by the OS.
+        onDownloaded(track.id.toString()); 
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -221,19 +190,6 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({
       console.error('Offline download failed:', e);
 
       try {
-        if (downloadRef.current) {
-          await downloadRef.current.cancelAsync();
-        }
-        const fileUri = getOfflineFilePath('mp3');
-        const fileInfo = await FileSystem.getInfoAsync(fileUri);
-        if (fileInfo.exists) {
-          await FileSystem.deleteAsync(fileUri);
-        }
-        const thumbUri = getOfflineFilePath('jpg');
-        const thumbInfo = await FileSystem.getInfoAsync(thumbUri);
-        if (thumbInfo.exists) {
-          await FileSystem.deleteAsync(thumbUri);
-        }
         await AsyncStorage.removeItem(`offline_${track?.id}`);
       } catch (cleanupError) {
         console.error("Error during cleanup after download failure:", cleanupError);
