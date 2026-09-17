@@ -1,5 +1,4 @@
 import TrackPlayer, { Event } from 'react-native-track-player';
-import { SleepTimerManager } from '@/lib/sleep-timer';
 
 export default async function trackPlayerService() {
   TrackPlayer.addEventListener(Event.RemotePlay, () => TrackPlayer.play());
@@ -24,15 +23,6 @@ export default async function trackPlayerService() {
     try {
       await TrackPlayer.seekTo((e as any).position);
     } catch {}
-  });
-
-  // Background playback progress event - wakes up JS engine even when screen is locked/off
-  TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, async () => {
-    await SleepTimerManager.checkTimerAndEnforce();
-  });
-
-  TrackPlayer.addEventListener(Event.PlaybackState, async () => {
-    await SleepTimerManager.checkTimerAndEnforce();
   });
 }
 
