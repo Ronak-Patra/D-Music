@@ -23,7 +23,7 @@ Designed with a sleek dark/light dynamic design system, D-Music allows users to 
 * **Full-Screen Player**: Interactive player view featuring vinyl rotating album covers, progressive timeline seeking, shuffle, loop mode, volume control, and playback speed adjustment.
 * **Swipe Gestures**: Swipe left or right on the player screen to instantly skip tracks.
 * **Live Synchronized Lyrics**: Synchronized, line-by-line real-time lyrics scrolling automatically with track playback.
-* **Sleep Timer**: Built-in countdown timer with presets (15 min, 30 min, 45 min, 60 min, or custom) that smoothly fades out and stops playback when finished.
+* **Sleep Timer**: Advanced sleep timer supporting standard presets (15 min, 30 min, 45 min, 60 min) as well as **custom minute durations**. Integrated directly into native audio events (`progressUpdateEventInterval: 1`) to guarantee accurate **screen-off background enforcement**, automatically pausing playback exact to the second even when the phone screen is locked and off.
 
 ### 💾 2. Local Audio & Offline Download Manager
 * **Local Audio Scanner**: Automatic device storage scanning (`.mp3`, `.m4a`, `.flac`, `.wav`, `.ogg`, `.opus`, `.aac`) with instant metadata extraction and seamless library integration.
