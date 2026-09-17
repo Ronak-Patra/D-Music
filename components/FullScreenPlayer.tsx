@@ -14,6 +14,7 @@ import {
   useWindowDimensions,
   PanResponder,
   DeviceEventEmitter,
+  TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Slider } from '@sharcoux/slider';
@@ -146,6 +147,7 @@ export const FullScreenPlayer = memo(function FullScreenPlayer({
   const [lyrics, setLyrics] = useState<LyricsData | null>(null);
   const [fetchingLyrics, setFetchingLyrics] = useState(false);
   const { sleepTimerActive, timeLeftMs, startSleepTimer, cancelSleepTimer } = useSleepTimer();
+  const [customSleepMinutes, setCustomSleepMinutes] = useState('');
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
@@ -703,6 +705,7 @@ export const FullScreenPlayer = memo(function FullScreenPlayer({
                 onPress={() => {
                   cancelSleepTimer();
                   setShowSleepTimerModal(false);
+                  setCustomSleepMinutes('');
                 }}
               >
                 <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancel Timer</Text>
@@ -717,6 +720,7 @@ export const FullScreenPlayer = memo(function FullScreenPlayer({
                   onPress={() => {
                     startSleepTimer(mins);
                     setShowSleepTimerModal(false);
+                    setCustomSleepMinutes('');
                   }}
                 >
                   <Text style={{ color: theme.textPrimary, fontSize: 16 }}>
@@ -724,6 +728,49 @@ export const FullScreenPlayer = memo(function FullScreenPlayer({
                   </Text>
                 </TouchableOpacity>
               ))}
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                <TextInput
+                  value={customSleepMinutes}
+                  onChangeText={setCustomSleepMinutes}
+                  placeholder="Custom mins..."
+                  placeholderTextColor={theme.textSecondary}
+                  keyboardType="number-pad"
+                  style={{
+                    flex: 1,
+                    height: 44,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    backgroundColor: theme.glass,
+                    color: theme.textPrimary,
+                    paddingHorizontal: 12,
+                    fontSize: 15,
+                  }}
+                />
+                <TouchableOpacity
+                  style={{
+                    height: 44,
+                    paddingHorizontal: 16,
+                    borderRadius: 12,
+                    backgroundColor: theme.accent,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onPress={() => {
+                    const parsed = parseInt(customSleepMinutes, 10);
+                    if (parsed && parsed > 0) {
+                      startSleepTimer(parsed);
+                      setShowSleepTimerModal(false);
+                      setCustomSleepMinutes('');
+                    } else {
+                      Alert.alert('Invalid Duration', 'Please enter a valid number of minutes.');
+                    }
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Set</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
           <TouchableOpacity
