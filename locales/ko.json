@@ -192,6 +192,15 @@
     "share_with_friends": "친구와 공유하기",
     "share_description": "친구들이 광고 없는 음악과 무제한 스트리밍, 오프라인 다운로드를 즐기길 바라시나요? D Music을 공유하고 그 분위기를 전해보세요!",
     "share_app": "앱 공유하기",
-    "share_message": "안녕하세요! 광고 없이 무제한 스트리밍과 오프라인 다운로드가 가능한 음악 앱, D Music을 확인해보세요. 당신만의 음악 동반자입니다! 🎵"
+    "share_message": "안녕하세요! 광고 없이 무제한 스트리밍과 오프라인 다운로드가 가능한 음악 앱, D Music을 확인해보세요. 당신만의 음악 동반자입니다! 🎵",
+    "swipe_gestures": "스외이프 제스처",
+    "swipe_gestures_description": "전체 화면 플레이어에서 곡을 건너뛰려면 좌/우 스와이프 활성화",
+    "dynamic_colors": "동적 UI 색상",
+    "dynamic_colors_desc": "현재 재생 중인 곡에 따라 앱 강조 색상을 자동으로 변경",
+    "local_audio_scanner": "로컬 오디오 스캐너",
+    "local_audio_scanner_description": "기기에서 로컬 오디오 파일(.mp3, .flac)을 스캔하여 D Music 보관함에 추가합니다.",
+    "scan_local_storage": "로컬 저장소 스캔",
+    "made_with": "정성껏 제작",
+    "by_d": "by D"
   }
 }

@@ -1,24 +1,21 @@
-import React, { useMemo, useState, createContext, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useEffect, useContext } from 'react';
 import { Tabs, usePathname } from 'expo-router';
 import { Player } from '@/components/Player';
 import { QueueDisplay } from '@/components/QueueDisplay';
-import { useMusicQueue } from '@/hooks/useMusicQueue';
 import { HapticTab } from '@/components/HapticTab';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import TabBarBackground from '@/components/ui/TabBarBackground';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Track } from '@/types/music';
 import { View, Modal, Text, TouchableOpacity, StyleSheet, Linking, ScrollView, Platform } from 'react-native';
-import { useDynamicColors } from '@/hooks/useDynamicColors';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MusicAPI } from '@/lib/music-api';
 import { useTranslation } from 'react-i18next';
 import { useConnectivity } from '@/hooks/useConnectivity';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
-import { useApiStatus } from '@/hooks/useApiStatus';
 import { useToast } from '@/hooks/useToast';
+import { MusicPlayerContext } from '@/contexts/MusicPlayerContext';
 
 interface PlatformUpdateConfig {
   latest_version: string;
@@ -35,52 +32,30 @@ interface UpdateConfig {
 
 const UPDATE_CONFIG_URL = 'https://raw.githubusercontent.com/BlackHatDevX/openspot-config/refs/heads/main/update-mobile.json';
 
-interface MusicPlayerContextType {
-  musicQueue: ReturnType<typeof useMusicQueue>;
-  isPlaying: boolean;
-  currentTrack: Track | null;
-  handleTrackSelect: (track: Track, trackList?: Track[], startIndex?: number) => void;
-  handleQueueTrackSelect: (track: Track, index: number) => void;
-  handlePlayingStateChange: (playing: boolean) => void;
-  toggleQueue: () => void;
-  setPendingAutoPlay: () => void;
-  dynamicColorsEnabled?: boolean;
-  toggleDynamicColors?: (enabled: boolean) => void;
-  songColor?: string | null;
-}
-
-export const MusicPlayerContext = createContext<MusicPlayerContextType>({
-  musicQueue: {} as ReturnType<typeof useMusicQueue>,
-  isPlaying: false,
-  currentTrack: null,
-  handleTrackSelect: () => {},
-  handleQueueTrackSelect: () => {},
-  handlePlayingStateChange: () => {},
-  toggleQueue: () => {},
-  setPendingAutoPlay: () => {},
-});
-
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme !== 'light';
-  const musicQueue = useMusicQueue();
-  const [isQueueOpen, setIsQueueOpen] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const pendingPlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const { isOffline } = useConnectivity();
   const pathname = usePathname();
-  const { isProviderDisabled } = useApiStatus();
   const { toastMessage, toastType, showToast } = useToast();
+  
+  const {
+    musicQueue,
+    isPlaying,
+    currentTrack,
+    handleQueueTrackSelect,
+    handlePlayingStateChange,
+    toggleQueue,
+    dynamicColorsEnabled,
+    songColor,
+    isQueueOpen,
+    setIsQueueOpen,
+    pendingAutoPlayRef,
+  } = useContext(MusicPlayerContext);
 
   const isIOS = Platform.OS === 'ios';
-  const currentTrack = useMemo(
-    () => musicQueue.tracks[musicQueue.currentIndex] ?? null,
-    [musicQueue.tracks, musicQueue.currentIndex]
-  );
-
-  const { dynamicColorsEnabled, toggleDynamicColors, songColor } = useDynamicColors(currentTrack);
 
   const tabTheme = useMemo(
     () => ({
@@ -135,125 +110,8 @@ export default function TabLayout() {
     void checkUpdateOnStart();
   }, [currentVersion]);
 
-  const pendingAutoPlayRef = useRef(false);
-
-  const setPendingAutoPlay = () => {
-    pendingAutoPlayRef.current = true;
-  };
-
-  const handleTrackSelect = (track: Track, trackList?: Track[], startIndex?: number) => {
-    const trackProvider = track.provider || 'saavn';
-    // Local files don't use any online provider — skip the API check entirely
-    if (trackProvider !== 'local' && isProviderDisabled(trackProvider as 'saavn' | 'ytmusic')) {
-      showToast('Currently API is down. Please use Saavn.', 'error');
-      return;
-    }
-
-    if (pendingPlayTimeoutRef.current) {
-      clearTimeout(pendingPlayTimeoutRef.current);
-      pendingPlayTimeoutRef.current = null;
-    }
-
-    const isSameTrack = currentTrack?.id === track.id;
-    const isSameQueue = trackList
-      ? trackList.length === musicQueue.tracks.length &&
-        trackList[startIndex ?? 0]?.id === track.id &&
-        musicQueue.currentIndex === (startIndex ?? 0)
-      : true;
-
-    if (isSameTrack && isSameQueue) {
-      pendingAutoPlayRef.current = !isPlaying;
-      setIsPlaying(prev => !prev);
-      return;
-    }
-
-
-    setIsPlaying(false);
-
-    pendingAutoPlayRef.current = true;
-
-    if (trackList && startIndex !== undefined) {
-      const selectedTrack = trackList[startIndex];
-      const selectedKey = `${selectedTrack.title?.toLowerCase().trim()}|${selectedTrack.artist?.toLowerCase().trim()}`;
-
-      const deduplicatedList: Track[] = [];
-      const seen = new Set<string>();
-
-      for (let i = 0; i < trackList.length; i++) {
-        const t = trackList[i];
-        const key = `${t.title?.toLowerCase().trim()}|${t.artist?.toLowerCase().trim()}`;
-        const idKey = t.id?.toString() || key;
-        if (!seen.has(key) && !seen.has(idKey)) {
-          seen.add(key);
-          seen.add(idKey);
-          deduplicatedList.push(t);
-        }
-      }
-
-      let newStartIndex = deduplicatedList.findIndex(t => {
-        const key = `${t.title?.toLowerCase().trim()}|${t.artist?.toLowerCase().trim()}`;
-        const idKey = t.id?.toString() || key;
-        const selectedIdKey = selectedTrack.id?.toString() || selectedKey;
-        return key === selectedKey || idKey === selectedIdKey;
-      });
-
-      if (newStartIndex === -1) newStartIndex = 0;
-
-      musicQueue.setQueueTracks(deduplicatedList, newStartIndex);
-    } else {
-      musicQueue.setQueueTracks([track], 0);
-    }
-
-    void MusicAPI.addToRecentlyPlayed(track);
-    setIsPlaying(true);
-  };
-
-  const handleQueueTrackSelect = (track: Track, index: number) => {
-    const trackProvider = track.provider || 'saavn';
-    if (isProviderDisabled(trackProvider as 'saavn' | 'ytmusic')) {
-      showToast('Currently API is down. Please use Saavn.', 'error');
-      return;
-    }
-
-    const isSameTrack = currentTrack?.id === track.id;
-    if (isSameTrack) {
-      setIsPlaying(prev => !prev);
-      return;
-    }
-    setIsPlaying(false);
-    pendingAutoPlayRef.current = true;
-    musicQueue.setCurrentIndex(index);
-    setIsPlaying(true);
-  };
-
-  const handlePlayingStateChange = (playing: boolean) => {
-    setIsPlaying(playing);
-  };
-
-  const toggleQueue = () => {
-    setIsQueueOpen(prev => !prev);
-  };
-
-  const closeQueue = () => {
-    setIsQueueOpen(false);
-  };
-
   return (
-    <MusicPlayerContext.Provider
-      value={{
-        musicQueue,
-        isPlaying,
-        currentTrack,
-        handleTrackSelect,
-        handleQueueTrackSelect,
-        handlePlayingStateChange,
-        toggleQueue,
-        setPendingAutoPlay,
-        dynamicColorsEnabled,
-        toggleDynamicColors,
-        songColor,
-      }}
-    >
+    <>
       <SafeAreaView edges={['left', 'right']} style={{ flex: 1, backgroundColor: tabTheme.safeArea }}>
         <View style={{ flex: 1, position: 'relative' }}>
           {isOffline && !pathname?.includes('/downloads') && <OfflineBanner />}
@@ -313,7 +171,7 @@ export default function TabLayout() {
             <Tabs.Screen
               name="stats"
               options={{
-                title: 'Stats',
+                title: t('tabs.stats', 'Stats'),
                 tabBarIcon: ({ color }) => <Ionicons size={24} name="stats-chart" color={color} />,
               }}
             />
@@ -349,7 +207,7 @@ export default function TabLayout() {
           {isQueueOpen && (
             <QueueDisplay
               isOpen={isQueueOpen}
-              onClose={closeQueue}
+              onClose={() => setIsQueueOpen(false)}
               musicQueue={musicQueue}
               onTrackSelect={handleQueueTrackSelect}
               currentTrack={currentTrack}
@@ -399,7 +257,7 @@ export default function TabLayout() {
           </View>
         )}
       </SafeAreaView>
-    </MusicPlayerContext.Provider>
+    </>
   );
 }
 

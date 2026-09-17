@@ -10,6 +10,7 @@ import { useThemeMode, ThemeModeProvider } from '@/hooks/theme-mode';
 import { LikedSongsProvider } from '@/hooks/useLikedSongs';
 import { useApiStatus } from '@/hooks/useApiStatus';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { MusicPlayerProvider } from '@/contexts/MusicPlayerContext';
 import '@/lib/i18n';
 
 SplashScreen.preventAutoHideAsync();
@@ -44,11 +45,13 @@ function AppNavigation() {
 
   return (
     <LikedSongsProvider>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style={resolvedScheme === 'dark' ? 'light' : 'dark'} />
+      <MusicPlayerProvider>
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="+not-found" />
+        </Stack>
+        <StatusBar style={resolvedScheme === 'dark' ? 'light' : 'dark'} />
+      </MusicPlayerProvider>
     </LikedSongsProvider>
   );
 }

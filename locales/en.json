@@ -199,7 +199,14 @@
     "share_description": "Want your friends to enjoy ad-free music with unlimited streaming and offline downloads? Share D Music and spread the vibe!",
     "share_app": "Share App",
     "share_message": "Hey! Check out D Music — ad-free music streaming with unlimited skips and offline downloads. Your personal music companion! 🎵",
-    "dynamic_colors": "Dynamic Colors",
-    "dynamic_colors_desc": "Automatically adapts the app's color scheme to match the album art of the currently playing song."
+    "swipe_gestures": "Swipe Gestures",
+    "swipe_gestures_description": "Enable left/right swipe to skip tracks in the full screen player",
+    "dynamic_colors": "Dynamic UI Colors",
+    "dynamic_colors_desc": "Adapt app accent colors to the currently playing song",
+    "local_audio_scanner": "Local Audio Scanner",
+    "local_audio_scanner_description": "Scan your device for local audio files (.mp3, .flac) and add them to your D Music library.",
+    "scan_local_storage": "Scan Local Storage",
+    "made_with": "Made with",
+    "by_d": "by D"
   }
 }

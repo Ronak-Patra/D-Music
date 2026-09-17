@@ -192,6 +192,15 @@
     "share_with_friends": "Compartir con amigos",
     "share_description": "¿Quieres que tus amigos disfruten de música sin anuncios, streaming ilimitado y descargas offline? Comparte D Music y difunde la vibra.",
     "share_app": "Compartir app",
-    "share_message": "¡Hola! Mira D Music — streaming de música sin anuncios con saltos ilimitados y descargas offline. ¡Tu compañero musical personal! 🎵"
+    "share_message": "¡Hola! Mira D Music — streaming de música sin anuncios con saltos ilimitados y descargas offline. ¡Tu compañero musical personal! 🎵",
+    "swipe_gestures": "Gestos de deslice",
+    "swipe_gestures_description": "Activar deslizamiento izquierda/derecha para saltar canciones en el reproductor a pantalla completa",
+    "dynamic_colors": "Colores dinámicos de UI",
+    "dynamic_colors_desc": "Adapta los colores del tema según la canción en reproducción",
+    "local_audio_scanner": "Escáner de audio local",
+    "local_audio_scanner_description": "Escanea tu dispositivo en busca de archivos de audio locales (.mp3, .flac) y añádelos a tu biblioteca de D Music.",
+    "scan_local_storage": "Escanear almacenamiento local",
+    "made_with": "Hecho con",
+    "by_d": "por D"
   }
 }
