@@ -134,6 +134,7 @@ export function Player({
               Capability.Stop,
             ],
             compactCapabilities: [Capability.Play, Capability.Pause, Capability.SkipToNext],
+            progressUpdateEventInterval: 1,
           });
           await TrackPlayer.setVolume(volume);
           playerReadyRef.current = true;
