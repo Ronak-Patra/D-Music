@@ -8,9 +8,12 @@ import { getStats, getHistory, PlaybackStats, HistoryEntry } from '@/lib/stats-t
 import { Image } from 'expo-image';
 import { MusicAPI } from '@/lib/music-api';
 
+import { useTranslation } from 'react-i18next';
+
 export default function StatsScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme !== 'light';
+  const { t } = useTranslation();
   
   const theme = {
     background: isDark ? '#050505' : '#f5efe6',
@@ -56,7 +59,7 @@ export default function StatsScreen() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
       >
-        <Text style={[styles.title, { color: theme.textPrimary }]}>Your Stats</Text>
+        <Text style={[styles.title, { color: theme.textPrimary }]}>{t('stats.your_stats', 'Your Stats')}</Text>
         
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={styles.statRow}>
@@ -65,12 +68,12 @@ export default function StatsScreen() {
               <Text style={[styles.statValue, { color: theme.textPrimary }]}>
                 {stats ? formatPlayTime(stats.totalPlayTimeMs) : '0h 0m'}
               </Text>
-              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Play Time</Text>
+              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>{t('stats.total_play_time', 'Total Play Time')}</Text>
             </View>
           </View>
         </View>
 
-        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Recently Played</Text>
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{t('home.recently_played', 'Recently Played')}</Text>
         {history.length > 0 ? (
           history.map((entry, index) => (
             <View key={index} style={[styles.historyItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -85,7 +88,7 @@ export default function StatsScreen() {
             </View>
           ))
         ) : (
-          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No history yet.</Text>
+          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>{t('stats.no_history', 'No history yet.')}</Text>
         )}
       </ScrollView>
     </SafeAreaView>

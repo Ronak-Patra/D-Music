@@ -1,11 +1,11 @@
-import React, { useContext, useEffect, useRef } from 'react';
+﻿import React, { useContext, useEffect, useRef } from 'react';
 import { View, StyleSheet, StatusBar, Dimensions, TouchableOpacity, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSearch } from '@/hooks/useSearch';
 import { TopBar } from '@/components/TopBar';
 import { SearchResults } from '@/components/SearchResults';
-import { MusicPlayerContext } from './_layout';
+import { MusicPlayerContext } from '@/contexts/MusicPlayerContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';

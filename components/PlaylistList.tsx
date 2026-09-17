@@ -14,6 +14,7 @@ interface PlaylistListProps {
   onPlaylistDownload?: (playlist: any) => void;
   onPlaylistLongPress?: (playlist: any) => void;
   onPlaylistDelete?: (playlist: any) => void;
+  isOffline?: boolean;
   theme?: {
     surface: string;
     border: string;
@@ -24,7 +25,7 @@ interface PlaylistListProps {
   };
 }
 
-export function PlaylistList({ playlists, onPlaylistPress, onPlaylistShuffle, onPlaylistPlay, onPlaylistDownload, onPlaylistLongPress, onPlaylistDelete, theme }: PlaylistListProps) {
+export function PlaylistList({ playlists, onPlaylistPress, onPlaylistShuffle, onPlaylistPlay, onPlaylistDownload, onPlaylistLongPress, onPlaylistDelete, isOffline, theme }: PlaylistListProps) {
   return (
     <View>
       {playlists.map((playlist, idx) => (
@@ -37,6 +38,7 @@ export function PlaylistList({ playlists, onPlaylistPress, onPlaylistShuffle, on
           onDownload={onPlaylistDownload ? () => onPlaylistDownload(playlist) : undefined}
           onLongPress={onPlaylistLongPress ? () => onPlaylistLongPress(playlist) : undefined}
           onDelete={onPlaylistDelete ? () => onPlaylistDelete(playlist) : undefined}
+          isOffline={isOffline}
           theme={theme}
         />
       ))}

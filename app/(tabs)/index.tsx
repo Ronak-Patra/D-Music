@@ -1,9 +1,9 @@
-import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, StatusBar, Text, TouchableOpacity, ScrollView, Modal, ActivityIndicator, FlatList, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSearch } from '@/hooks/useSearch';
 import { TopBar } from '@/components/TopBar';
-import { MusicPlayerContext } from './_layout';
+import { MusicPlayerContext } from '@/contexts/MusicPlayerContext';
 import { MusicAPI } from '@/lib/music-api';
 import { Track } from '@/types/music';
 import { Image } from 'expo-image';
@@ -104,8 +104,8 @@ export default function HomeScreen() {
     { label: 'French', value: 'fr', nativeLabel: 'Francais' },
     { label: 'Russian', value: 'ru', nativeLabel: 'Russkiy' },
     { label: 'Hebrew', value: 'he', nativeLabel: 'Ivrit' },
-    { label: 'Turkish', value: 'tr', nativeLabel: 'Türkçe' },
-    { label: 'Korean', value: 'ko', nativeLabel: '한국어' },
+    { label: 'Turkish', value: 'tr', nativeLabel: 'TÃ¼rkÃ§e' },
+    { label: 'Korean', value: 'ko', nativeLabel: 'í•œêµ­ì–´' },
   ];
 
   

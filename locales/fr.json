@@ -192,6 +192,15 @@
     "share_with_friends": "Partager avec des amis",
     "share_description": "Tu veux que tes amis profitent de musique sans pub, streaming illimité et téléchargements hors ligne ? Partage D Music et fais rayonner la bonne vibe !",
     "share_app": "Partager l'app",
-    "share_message": "Hé ! Découvre D Music — streaming musical sans pub avec nombre illimité de sauts et téléchargements hors ligne. Ton compagnon musical personnel ! 🎵"
+    "share_message": "Hé ! Découvre D Music — streaming musical sans pub avec nombre illimité de sauts et téléchargements hors ligne. Ton compagnon musical personnel ! 🎵",
+    "swipe_gestures": "Gestes de balayage",
+    "swipe_gestures_description": "Activer le balayage gauche/droite pour passer les morceaux dans le lecteur plein écran",
+    "dynamic_colors": "Couleurs UI dynamiques",
+    "dynamic_colors_desc": "Adapter les couleurs d'accentuation de l'application à la chanson en cours de lecture",
+    "local_audio_scanner": "Scanner d'audio local",
+    "local_audio_scanner_description": "Scannez votre appareil pour trouver des fichiers audio locaux (.mp3, .flac) et ajoutez-les à votre bibliothèque D Music.",
+    "scan_local_storage": "Scanner le stockage local",
+    "made_with": "Fait avec",
+    "by_d": "par D"
   }
 }

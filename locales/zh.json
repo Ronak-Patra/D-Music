@@ -192,6 +192,15 @@
     "share_with_friends": "分享给朋友",
     "share_description": "想让你的朋友享受无广告、无限制流媒体和离线下载的音乐体验吗？分享 D Music，传递音乐氛围！",
     "share_app": "分享应用",
-    "share_message": "嘿！看看 D Music — 无广告、无限跳过、支持离线下载的音乐流媒体。你的个人音乐伴侣！🎵"
+    "share_message": "嘿！看看 D Music — 无广告、无限跳过、支持离线下载的音乐流媒体。你的个人音乐伴侣！🎵",
+    "swipe_gestures": "滑动手势",
+    "swipe_gestures_description": "在全屏播放器中开启左右滑动切歌",
+    "dynamic_colors": "动态 UI 颜色",
+    "dynamic_colors_desc": "根据当前播放的歌曲自动调整应用主题颜色",
+    "local_audio_scanner": "本地音频扫描",
+    "local_audio_scanner_description": "扫描设备上的本地音频文件 (.mp3, .flac) 并将其添加到 D Music 资料库。",
+    "scan_local_storage": "扫描本地存储",
+    "made_with": "精心打造",
+    "by_d": "by D"
   }
 }

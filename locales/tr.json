@@ -192,6 +192,15 @@
     "share_with_friends": "Arkadaşlarla Paylaş",
     "share_description": "Arkadaşlarının da reklamsız, sınırsız çevrimdışı müzik keyfi yapmasını ister misin? D Music'u paylaş ve havayı yay!",
     "share_app": "Uygulamayı Paylaş",
-    "share_message": "Hey! D Music'a göz at — reklamsız, sınırsız atlama ve çevrimdışı indirme ile müzik akışı. Kişisel müzik arkadaşın! 🎵"
+    "share_message": "Hey! D Music'a göz at — reklamsız, sınırsız atlama ve çevrimdışı indirme ile müzik akışı. Kişisel müzik arkadaşın! 🎵",
+    "swipe_gestures": "Kaydırma Hareketleri",
+    "swipe_gestures_description": "Tam ekran oynatıcıda parçaları atlamak için sola/sağa kaydırmayı etkinleştirin",
+    "dynamic_colors": "Dinamik UI Renkleri",
+    "dynamic_colors_desc": "Uygulama vurgu renklerini çalan şarkıya göre uyarlayın",
+    "local_audio_scanner": "Yerel Ses Tarayıcısı",
+    "local_audio_scanner_description": "Cihazınızdaki yerel ses dosyalarını (.mp3, .flac) tarayın ve D Music kitaplığınıza ekleyin.",
+    "scan_local_storage": "Yerel Depolamayı Tara",
+    "made_with": "Sevgiyle yapıldı",
+    "by_d": "D tarafından"
   }
 }

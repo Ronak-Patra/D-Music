@@ -12,8 +12,9 @@ import { PlaylistStorage } from '@/lib/playlist-storage';
 import { useLikedSongs } from '@/hooks/useLikedSongs';
 import { PlaylistList } from '@/components/PlaylistList';
 import { MusicAPI } from '@/lib/music-api';
+import { MusicPlayerContext } from '@/contexts/MusicPlayerContext';
 import { DownloadManager } from '@/lib/download-manager';
-import { MusicPlayerContext } from './_layout';
+import { Track } from '@/types/music';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -198,10 +199,10 @@ export default function DownloadsScreen() {
   const [showSearch, setShowSearch] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
 
-  // Collapsible state
+  // Collapsible state (expanded by default so user sees tracks instantly)
   const [playlistsCollapsed, setPlaylistsCollapsed] = useState(false);
-  const [downloadedCollapsed, setDownloadedCollapsed] = useState(true);
-  const [localCollapsed, setLocalCollapsed] = useState(true);
+  const [downloadedCollapsed, setDownloadedCollapsed] = useState(false);
+  const [localCollapsed, setLocalCollapsed] = useState(false);
 
   const { isLiked, toggleLike } = useLikedSongs();
   const { handleTrackSelect, currentTrack, isPlaying } = useContext(MusicPlayerContext);
@@ -221,6 +222,7 @@ export default function DownloadsScreen() {
         return;
       }
       setLoading(true);
+      await DownloadManager.syncDownloads();
 
       const media = await MediaLibrary.getAssetsAsync({ mediaType: 'audio', first: 2000 });
       const audioFiles = media.assets;
@@ -281,36 +283,54 @@ export default function DownloadsScreen() {
   const fetchOfflineTracks = useCallback(async () => {
     setLoading(true);
     try {
+      await DownloadManager.syncDownloads();
       const playlists = await PlaylistStorage.getPlaylists();
       const offline = playlists.find(pl => pl.name === 'offline');
-      if (!offline) { setTracks([]); return; }
+      let offlineTrackData: Track[] = [];
 
-      const reversedIds = [...offline.trackIds].reverse();
+      if (offline && offline.trackIds && offline.trackIds.length > 0) {
+        const reversedIds = [...offline.trackIds].reverse();
+        const staleIds: string[] = [];
 
-      const entries = await Promise.all(
-        reversedIds.map(async (id) => {
-          try {
-            const raw = await AsyncStorage.getItem(`offline_${id}`);
-            if (raw) {
-              const meta: OfflineTrackMeta = JSON.parse(raw);
-              if (meta.trackData) return { id, meta };
-            }
-          } catch { /* ignore corrupt entries */ }
-
-          if (!isOffline) {
+        const entries = await Promise.all(
+          reversedIds.map(async (id) => {
             try {
-              const resolved = await MusicAPI.resolveTrackById(id);
-              if (resolved) return { id, meta: { trackData: resolved } as OfflineTrackMeta };
-            } catch (e) {
-              console.warn(`API fallback failed for track ${id}:`, e);
-            }
-          }
-          return null;
-        })
-      );
+              const raw = await AsyncStorage.getItem(`offline_${id}`);
+              if (raw) {
+                const meta: OfflineTrackMeta = JSON.parse(raw);
+                if (meta.trackData) return { id, meta };
+              }
+            } catch { /* ignore corrupt entries */ }
 
-      const valid = entries.filter(Boolean) as { id: string; meta: OfflineTrackMeta }[];
-      setTracks(valid.map(e => e.meta.trackData));
+            staleIds.push(id);
+            return null;
+          })
+        );
+
+        if (staleIds.length > 0) {
+          for (const staleId of staleIds) {
+            await PlaylistStorage.removeTrackFromPlaylist(staleId, 'offline');
+          }
+        }
+
+        const valid = entries.filter(Boolean) as { id: string; meta: OfflineTrackMeta }[];
+        offlineTrackData = valid.map(e => e.meta.trackData);
+      }
+
+      // Load scanned local device tracks
+      try {
+        const { getLocalAudio } = require('@/lib/local-audio');
+        const localDeviceTracks = await getLocalAudio();
+        if (localDeviceTracks && localDeviceTracks.length > 0) {
+          const existingIds = new Set(offlineTrackData.map(t => t.id.toString()));
+          const uniqueLocal = localDeviceTracks.filter((lt: any) => !existingIds.has(lt.id.toString()));
+          offlineTrackData = [...offlineTrackData, ...uniqueLocal];
+        }
+      } catch (e) {
+        console.warn('Could not load scanned local audio in downloads tab', e);
+      }
+
+      setTracks(offlineTrackData);
 
       const newThumbMap: Record<string, string> = {};
       setThumbMap(newThumbMap);
@@ -325,10 +345,9 @@ export default function DownloadsScreen() {
             const count = await DownloadManager.getPlaylistTrackCount(name);
             validPlaylists.push({
                 name,
-                trackIds: [], // We don't have this right away
+                trackIds: [],
                 trackCount: count
             });
-            // Try to find a cover from newThumbMap or use default
             playlistCovers[name] = 'https://misc.scdn.co/liked-songs/liked-songs-640.png';
         }
         
@@ -366,27 +385,21 @@ export default function DownloadsScreen() {
     return result;
   }, [tracks, searchQuery, sortKey]);
 
-  // Group tracks: "Downloaded Songs" = downloaded from app (in documentDirectory) or non-local
-  // "Local Audio Files" = scanned from device (provider === 'local' and NOT in documentDirectory)
   const { downloadedTracks, localTracks } = useMemo(() => {
     const downloaded: Track[] = [];
     const local: Track[] = [];
     displayedTracks.forEach(track => {
-      if (track.provider === 'local') {
-        // Check if this file lives in the app's own download folder
-        const uri = track.uri || '';
-        if (APP_DOWNLOAD_DIR && uri.startsWith(APP_DOWNLOAD_DIR)) {
-          downloaded.push(track);
-        } else {
-          local.push(track);
-        }
+      const uri = track.uri || '';
+      if (track.provider === 'local' || track.id.toString().startsWith('local_')) {
+        // Scanned device local tracks
+        local.push(track);
       } else {
         // Downloaded from JioSaavn / YT Music
         downloaded.push(track);
       }
     });
     return { downloadedTracks: downloaded, localTracks: local };
-  }, [displayedTracks, APP_DOWNLOAD_DIR]);
+  }, [displayedTracks]);
 
   const handlePlay = useCallback((track: Track, sectionTracks: Track[], indexInSection: number) => {
     handleTrackSelect(track, sectionTracks, indexInSection);
@@ -422,8 +435,12 @@ export default function DownloadsScreen() {
       const raw = await AsyncStorage.getItem(`offline_${track.id}`);
       if (raw) {
         const { fileUri, thumbUri } = JSON.parse(raw);
-        if (fileUri) await FileSystem.deleteAsync(fileUri, { idempotent: true });
-        if (thumbUri) await FileSystem.deleteAsync(thumbUri, { idempotent: true });
+        if (fileUri) {
+          try { await DownloadManager.safeDelete(fileUri); } catch (e) { /* file might be manually deleted already */ }
+        }
+        if (thumbUri) {
+          try { await DownloadManager.safeDelete(thumbUri); } catch (e) { /* ignore */ }
+        }
         await AsyncStorage.removeItem(`offline_${track.id}`);
       }
       setTracks(prev => prev.filter(t => t.id !== track.id));
@@ -458,14 +475,14 @@ export default function DownloadsScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            try {
-              const masterUri = await DownloadManager.getMasterFolderUri();
-              if (masterUri) {
-                const targetDirUri = await DownloadManager.ensureDirectoryExists(masterUri, playlist.name.replace(/[^a-zA-Z0-9 -]/g, '').trim());
-                await FileSystem.deleteAsync(targetDirUri, { idempotent: true });
-                setOfflinePlaylists(prev => prev.filter(p => p.name !== playlist.name));
-              }
-            } catch (e) {
+              try {
+                const masterUri = await DownloadManager.getMasterFolderUri();
+                if (masterUri) {
+                  await DownloadManager.deletePlaylist(playlist.name);
+                  setOfflinePlaylists(prev => prev.filter(p => p.name !== playlist.name));
+                  await DownloadManager.syncDownloads();
+                }
+              } catch (e) {
               Alert.alert('Error', 'Failed to delete playlist folder.');
             }
           }
@@ -630,10 +647,10 @@ export default function DownloadsScreen() {
                   <Ionicons name="filter" size={20} color={theme.textPrimary} />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={handleScanFolder}
+                  onPress={fetchOfflineTracks}
                   style={[styles.headerButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
                 >
-                  <Ionicons name="scan" size={20} color={theme.textPrimary} />
+                  <Ionicons name="refresh" size={20} color={theme.textPrimary} />
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={handleShuffle}
@@ -698,19 +715,23 @@ export default function DownloadsScreen() {
         {/* Content */}
         {loading ? (
           <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: 40 }} />
-        ) : displayedTracks.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="cloud-download-outline" size={52} color={theme.textSecondary} />
-            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-              {searchQuery ? `No results for "${searchQuery}"` : t('components.no_offline_music')}
-            </Text>
-          </View>
         ) : (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+          <>
+            {/* Empty state — only shown when nothing at all exists */}
+            {offlinePlaylists.length === 0 && downloadedTracks.length === 0 && localTracks.length === 0 && (
+              <View style={styles.emptyState}>
+                <Ionicons name="cloud-download-outline" size={52} color={theme.textSecondary} />
+                <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                  {searchQuery ? `No results for "${searchQuery}"` : t('components.no_offline_music')}
+                </Text>
+              </View>
+            )}
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
             {/* Downloaded Playlists Section */}
             {offlinePlaylists.length > 0 && (
               <CollapsibleSection
-                title="Downloaded Playlists"
+                title={t('downloads.downloaded_playlists', 'Downloaded Playlists')}
                 count={offlinePlaylists.length}
                 collapsed={playlistsCollapsed}
                 onToggle={togglePlaylistsCollapsed}
@@ -725,12 +746,13 @@ export default function DownloadsScreen() {
                     cover: offlinePlaylistCovers[pl.name] || pl.cover,
                   }))}
                   onPlaylistPress={(pl) => {
-                    router.push(`/media/playlist/${pl.name}?title=${encodeURIComponent(pl.name)}&offline=true`);
+                    router.push(`/media/playlist/${encodeURIComponent(pl.name)}?title=${encodeURIComponent(pl.name)}&offline=true`);
                   }}
                   onPlaylistPlay={pl => handlePlaylistPlay(pl, false)}
                   onPlaylistShuffle={pl => handlePlaylistPlay(pl, true)}
                   onPlaylistLongPress={handleDeletePlaylist}
                   onPlaylistDelete={handleDeletePlaylist}
+                  isOffline={true}
                   theme={{
                     surface: theme.surface,
                     border: theme.border,
@@ -746,7 +768,7 @@ export default function DownloadsScreen() {
             {/* Downloaded Songs Section */}
             {downloadedTracks.length > 0 && (
               <CollapsibleSection
-                title="Downloaded Songs"
+                title={t('downloads.downloaded_songs', 'Downloaded Songs')}
                 count={downloadedTracks.length}
                 collapsed={downloadedCollapsed}
                 onToggle={toggleDownloadedCollapsed}
@@ -764,7 +786,7 @@ export default function DownloadsScreen() {
             {/* Local Audio Files Section */}
             {localTracks.length > 0 && (
               <CollapsibleSection
-                title="Local Audio Files"
+                title={t('downloads.local_audio_files', 'Local Audio Files')}
                 count={localTracks.length}
                 collapsed={localCollapsed}
                 onToggle={toggleLocalCollapsed}
@@ -779,6 +801,7 @@ export default function DownloadsScreen() {
               </CollapsibleSection>
             )}
           </ScrollView>
+          </>
         )}
       </View>
     </SafeAreaView>

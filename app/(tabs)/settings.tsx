@@ -19,7 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { useTranslation } from 'react-i18next';
 import { useConnectivity } from '@/hooks/useConnectivity';
-import { MusicPlayerContext } from './_layout';
+import { MusicPlayerContext } from '@/contexts/MusicPlayerContext';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemeMode, useThemeMode } from '@/hooks/theme-mode';
@@ -131,13 +131,26 @@ export default function SettingsScreen() {
 
   const languageOptions: { label: string; value: string; nativeLabel: string }[] = [
     { label: 'English', value: 'en', nativeLabel: 'English' },
-    { label: 'Hindi', value: 'hi', nativeLabel: 'Hindi' },
-    { label: 'Spanish', value: 'es', nativeLabel: 'Espanol' },
-    { label: 'Chinese', value: 'zh', nativeLabel: 'Zhongwen' },
+    { label: 'Hindi', value: 'hi', nativeLabel: 'हिन्दी' },
+    { label: 'Bengali', value: 'bn', nativeLabel: 'বাংলা' },
+    { label: 'Punjabi', value: 'pa', nativeLabel: 'ਪੰਜਾਬੀ' },
+    { label: 'Marathi', value: 'mr', nativeLabel: 'मराठी' },
+    { label: 'Gujarati', value: 'gu', nativeLabel: 'ગુજરાતી' },
+    { label: 'Tamil', value: 'ta', nativeLabel: 'தமிழ்' },
+    { label: 'Telugu', value: 'te', nativeLabel: 'తెలుగు' },
+    { label: 'Kannada', value: 'kn', nativeLabel: 'ಕನ್ನಡ' },
+    { label: 'Malayalam', value: 'ml', nativeLabel: 'മലയാളം' },
+    { label: 'Odia', value: 'or', nativeLabel: 'ଓଡ଼ିଆ' },
+    { label: 'Assamese', value: 'as', nativeLabel: 'অসমীয়া' },
+    { label: 'Urdu', value: 'ur', nativeLabel: 'اردو' },
+    { label: 'Nepali', value: 'ne', nativeLabel: 'नेपाली' },
+    { label: 'Sanskrit', value: 'sa', nativeLabel: 'संस्कृतम्' },
+    { label: 'Spanish', value: 'es', nativeLabel: 'Español' },
+    { label: 'Chinese', value: 'zh', nativeLabel: '中文' },
     { label: 'German', value: 'de', nativeLabel: 'Deutsch' },
-    { label: 'French', value: 'fr', nativeLabel: 'Francais' },
-    { label: 'Russian', value: 'ru', nativeLabel: 'Russkiy' },
-    { label: 'Hebrew', value: 'he', nativeLabel: 'Ivrit' },
+    { label: 'French', value: 'fr', nativeLabel: 'Français' },
+    { label: 'Russian', value: 'ru', nativeLabel: 'Русский' },
+    { label: 'Hebrew', value: 'he', nativeLabel: 'עברית' },
     { label: 'Turkish', value: 'tr', nativeLabel: 'Türkçe' },
     { label: 'Korean', value: 'ko', nativeLabel: '한국어' },
   ];
@@ -341,6 +354,7 @@ export default function SettingsScreen() {
           <View style={styles.segmentRow}>
             {modeOptions.map((option) => {
               const active = mode === option.value;
+              const label = t(`components.theme_${option.value}`, option.label);
               return (
                 <TouchableOpacity
                   key={option.value}
@@ -351,7 +365,7 @@ export default function SettingsScreen() {
                   ]}
                   onPress={() => setMode(option.value)}
                 >
-                  <Text style={[styles.segmentText, { color: active ? '#fff' : theme.textSecondary }]}>{option.label}</Text>
+                  <Text style={[styles.segmentText, { color: active ? '#fff' : theme.textSecondary }]}>{label}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -415,8 +429,8 @@ export default function SettingsScreen() {
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={styles.toggleRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.cardTitle, { color: theme.textPrimary, marginBottom: 2 }]}>Swipe Gestures</Text>
-              <Text style={[styles.cardText, { color: theme.textSecondary }]}>Enable left/right swipe to skip tracks in the full screen player</Text>
+              <Text style={[styles.cardTitle, { color: theme.textPrimary, marginBottom: 2 }]}>{t('settings.swipe_gestures', 'Swipe Gestures')}</Text>
+              <Text style={[styles.cardText, { color: theme.textSecondary }]}>{t('settings.swipe_gestures_description', 'Enable left/right swipe to skip tracks in the full screen player')}</Text>
             </View>
             <TouchableOpacity
               style={[styles.toggleTrack, { backgroundColor: gesturesEnabled ? theme.accent : theme.surfaceElevated }]}
@@ -444,11 +458,10 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>Local Audio Scanner</Text>
+          <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>{t('settings.local_audio_scanner', 'Local Audio Scanner')}</Text>
           <Text style={[styles.cardText, { color: theme.textSecondary, marginBottom: 12 }]}>
-            Scan your device for local audio files (.mp3, .flac) and add them to your D Music library.
+            {t('settings.local_audio_scanner_description', 'Scan your device for local audio files (.mp3, .flac) and add them to your D Music library.')}
           </Text>
           <TouchableOpacity
             style={[styles.primaryButton, { backgroundColor: theme.accent }]}
@@ -463,17 +476,16 @@ export default function SettingsScreen() {
               }
             }}
           >
-            <Text style={styles.primaryButtonText}>Scan Local Storage</Text>
+            <Text style={styles.primaryButtonText}>{t('settings.scan_local_storage', 'Scan Local Storage')}</Text>
           </TouchableOpacity>
         </View>
 
-
-
-
         <View style={styles.footer}>
-          <Text style={[styles.footerText, { color: theme.textSecondary }]}>
-            Made with <Text style={{ color: '#ff4444' }}>❤</Text> by D
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Text style={[styles.footerText, { color: theme.textSecondary }]}>{t('settings.made_with', 'Made with')}</Text>
+            <Ionicons name="heart" size={13} color="#ff4444" />
+            <Text style={[styles.footerText, { color: theme.textSecondary }]}>{t('settings.by_d', 'by D')}</Text>
+          </View>
         </View>
       </ScrollView>
 
@@ -582,7 +594,7 @@ export default function SettingsScreen() {
                 <Text style={[styles.changelogTitle, { color: theme.textPrimary }]}>What&apos;s New:</Text>
                 {platformUpdateConfig.changelog[platformUpdateConfig.latest_version].map((item, idx) => (
                   <Text key={idx} style={[styles.changelogItem, { color: theme.textSecondary }]}>
-                    • {item}
+                    â€¢ {item}
                   </Text>
                 ))}
               </View>
@@ -610,7 +622,7 @@ export default function SettingsScreen() {
                     <Text style={[styles.changelogVersionTitle, { color: theme.textPrimary }]}>v{version}</Text>
                     {items.map((item, idx) => (
                       <Text key={idx} style={[styles.changelogItem, { color: theme.textSecondary }]}>
-                        • {item}
+                        â€¢ {item}
                       </Text>
                     ))}
                   </View>

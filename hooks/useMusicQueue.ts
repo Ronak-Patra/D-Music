@@ -187,6 +187,9 @@ export function useMusicQueue() {
   const setCurrentIndex = useCallback((index: number): Track | null => {
     let result: Track | null = null;
     setQueue(prev => {
+      if (index === -1) {
+        return { ...prev, currentIndex: -1 };
+      }
       if (index < 0 || index >= prev.tracks.length) return prev;
       result = prev.tracks[index];
       return { ...prev, currentIndex: index };

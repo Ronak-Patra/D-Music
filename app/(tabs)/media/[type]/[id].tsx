@@ -21,7 +21,7 @@ import { PlaylistStorage } from '@/lib/playlist-storage';
 
 import { MusicAPI } from '@/lib/music-api';
 import { Track } from '@/types/music';
-import { MusicPlayerContext } from '../../_layout';
+import { MusicPlayerContext } from '@/contexts/MusicPlayerContext';
 import { useLikedSongs } from '@/hooks/useLikedSongs';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
@@ -169,19 +169,25 @@ export default function MediaDetailsScreen() {
         let fetchedTracks: Track[] = [];
 
         if (isOfflineMode && mediaId) {
-            // In offline mode, mediaId acts as the playlist name
-            const masterUri = await DownloadManager.getMasterFolderUri();
-            if (masterUri) {
-                const safePlaylistName = mediaId.replace(/[^a-zA-Z0-9 -]/g, '').trim();
-                const targetDirUri = await DownloadManager.ensureDirectoryExists(masterUri, safePlaylistName);
-                const files = await FileSystem.StorageAccessFramework.readDirectoryAsync(targetDirUri);
-                const metaUri = files.find(u => u.endsWith('playlist.json'));
-                if (metaUri) {
-                    const metaData = await FileSystem.readAsStringAsync(metaUri);
-                    const parsed = JSON.parse(metaData);
-                    if (parsed.tracks) {
-                        fetchedTracks = parsed.tracks;
-                    }
+            // In offline mode, mediaId acts as the playlist name (may be URI-encoded)
+            let decodedPlaylistName = mediaId;
+            try { decodedPlaylistName = decodeURIComponent(mediaId); } catch(e) {}
+            
+            const keys = await AsyncStorage.getAllKeys();
+            const offlineKeys = keys.filter(k => k.startsWith('offline_'));
+            for (const key of offlineKeys) {
+                const data = await AsyncStorage.getItem(key);
+                if (data) {
+                    try {
+                        const parsed = JSON.parse(data);
+                        const storedName = parsed.playlistName || '';
+                        // Match against both original and safe-sanitized names
+                        const safeName = storedName.replace(/[^a-zA-Z0-9 -]/g, '').trim();
+                        if (storedName === decodedPlaylistName || safeName === decodedPlaylistName) {
+                            const track = parsed.metadata || parsed.trackData;
+                            if (track) fetchedTracks.push(track);
+                        }
+                    } catch(e) {}
                 }
             }
             setTotalSongs(fetchedTracks.length);

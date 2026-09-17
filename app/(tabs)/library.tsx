@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlaylistList } from '@/components/PlaylistList';
 import { PlaylistCard } from '@/components/PlaylistCard';
 import { useLikedSongs } from '@/hooks/useLikedSongs';
-import { MusicPlayerContext } from './_layout';
+import { MusicPlayerContext } from '@/contexts/MusicPlayerContext';
 import { Ionicons } from '@expo/vector-icons';
 import { PlaylistStorage, Playlist } from '@/lib/playlist-storage';
 import { MusicAPI } from '@/lib/music-api';
@@ -105,7 +105,8 @@ export default function LibraryScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchSavedMedia();
-    }, [fetchSavedMedia])
+      fetchPlaylists();
+    }, [fetchSavedMedia, fetchPlaylists])
   );
 
   useEffect(() => {
