@@ -35,10 +35,14 @@ Designed with a sleek dark/light dynamic design system, D-Music allows users to 
 * **Dual Music Streaming Providers**:
   * **JioSaavn API Integration**: Access millions of Bollywood, Regional Indian, and International songs, albums, and playlists in high audio quality.
   * **YouTube Music API Integration (Beta)**: Stream music and audio tracks directly powered by YouTube Music.
+* **Individual Songs Algorithm**: All songs on the Home page are fetched directly as standalone individual song entities — not bundled from playlists or albums. Every section (Trending, New Releases, Discover Random) returns individual tracks forming a direct playback queue when tapped.
 * **Smart New Releases Engine**: Intelligent filter engine verifying exact release dates to deliver genuine fresh releases without older catalog clutter.
 * **Trending Charts & Country Filters**: Global and region-specific trending lists (including auto-location detection and country picker).
-* **Advanced Multi-Filter Discovery**: Filter songs by genre (e.g., Punjabi Rock, Pop, Classical), release year, sub-region, and popularity.
+* **Anime Region**: Dedicated **Anime** region option in the Region selector. Selecting Anime fetches Japanese Anime OSTs, openings, endings, and J-Pop tracks directly.
+* **Discover Random Section**: A new shuffled song discovery section on the Home page. Songs are randomized on every page refresh while strictly respecting the active Region, Sub-Region, and Music Genre filters.
+* **Advanced Multi-Filter Discovery**: Filter songs by genre (Pop, Hip Hop, Rock, Acoustic, Devotional, Classical, Lofi), release year, sub-region language (for India: Hindi, Punjabi, Tamil, Telugu, Marathi, Bhojpuri, Bengali, Malayalam, Kannada, Haryanvi), and popularity.
 * **Personalized Recommendations**: Smart recommendation engine serving songs based on your recently played tracks and favorites.
+* **Smart Region Keyword Engine**: Search queries are constructed using actual musical genre keywords relevant to a region (e.g. `English` for US/UK/Global, `Hindi` for India, `Anime Japanese OST` for Anime) instead of literal country names — preventing irrelevant results like songs literally titled "United States".
 
 ### 📚 4. Library & Playlist Management
 * **Custom Playlists**: Create, rename, customize covers, and reorder tracks within custom playlists.
@@ -61,6 +65,19 @@ D-Music natively supports full UI translation across **23 official languages**, 
 ### 📊 7. Listening Analytics & Stats
 * **Total Play Time Tracker**: Calculates and displays total time spent listening to music.
 * **Recently Played History**: Tracks your playback timeline so you can jump back to previous songs anytime.
+
+---
+
+## 🏠 Home Page Sections
+
+| Section | Description |
+| :--- | :--- |
+| **Trending** | Live region-specific trending songs fetched as individual tracks |
+| **New Releases** | Latest individual songs filtered by region, sub-region, and genre |
+| **Discover Random** | Randomly shuffled songs respecting all active filters — refreshes every session |
+| **Liked Songs** | Your saved/hearted tracks for quick access |
+| **Continue Listening** | Recently played tracks history |
+| **Recommended For You** | Personalized recommendations based on listening history |
 
 ---
 

@@ -1,4 +1,4 @@
-﻿import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, StatusBar, Text, TouchableOpacity, ScrollView, Modal, ActivityIndicator, FlatList, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSearch } from '@/hooks/useSearch';
@@ -77,6 +77,9 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [recommendedTracks, setRecommendedTracks] = useState<Track[]>([]);
   const [isFetchingRecommendations, setIsFetchingRecommendations] = useState(false);
+
+  const [randomTracks, setRandomTracks] = useState<Track[]>([]);
+  const [isRandomLoading, setIsRandomLoading] = useState(false);
 
   const handleRegionChange = async (nextRegion: string) => {
     setRegionOverride(nextRegion);
@@ -271,6 +274,35 @@ export default function HomeScreen() {
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
 
+  // Helper to map region/sub-region/genre into refined search keywords
+  const getSearchTermForFilters = (targetType: 'trending' | 'new' | 'random') => {
+    let term = '';
+
+    if (activeRegion === 'Anime') {
+      term += 'Anime Japanese OST ';
+    } else if (subRegion) {
+      term += `${subRegion} `;
+    } else if (activeRegion && activeRegion === 'India') {
+      term += 'Hindi ';
+    } else if (activeRegion && activeRegion !== 'your country') {
+      term += 'English ';
+    }
+
+    if (musicStyle) {
+      term += `${musicStyle} `;
+    }
+
+    if (targetType === 'new') {
+      term += `Latest songs ${new Date().getFullYear()}`;
+    } else if (targetType === 'random') {
+      term += 'hits tracks songs';
+    } else {
+      term += 'top songs';
+    }
+
+    return term.trim();
+  };
+
   useEffect(() => {
     let isMounted = true;
 
@@ -382,30 +414,18 @@ export default function HomeScreen() {
     };
 
     if (!countryLoading && activeRegion && activeRegion !== 'your country') {
-      const hasSpecificFilter = !!musicStyle || !!subRegion;
+      const hasSpecificFilter = !!musicStyle || !!subRegion || activeRegion === 'Anime';
       setIsTrendingLoading(true);
 
       if (hasSpecificFilter) {
         const fetchStyleOrRegion = async () => {
-          let searchQuery = 'Top 50 ';
-          if (subRegion) searchQuery += `${subRegion} `;
-          else if (activeRegion && activeRegion !== 'India' && activeRegion !== 'your country') searchQuery += `${activeRegion} `;
-          if (musicStyle) searchQuery += `${musicStyle} `;
-          
+          const queryName = getSearchTermForFilters('trending');
           try {
-            const queryName = searchQuery.trim();
-            const res = await MusicAPI.search({ q: queryName, type: 'playlist' });
-            if (res.playlists && res.playlists.length > 0) {
-              const pId = res.playlists[0].id;
-              const result = await MusicAPI.getPlaylistSongsPaginated(pId, 0);
-              if (result.tracks && result.tracks.length > 0) {
-                return { tracks: result.tracks };
-              }
-            }
-            return MusicAPI.searchTracks(queryName.replace('Top 50', '').trim(), 1, 30);
+            const res = await MusicAPI.searchTracks(queryName, 1, 30);
+            return res;
           } catch (e) {
-            console.warn('Playlist fallback to track search failed', e);
-            return MusicAPI.searchTracks(searchQuery.replace('Top 50', '').trim(), 1, 30);
+            console.warn('Track search failed', e);
+            return { tracks: [] };
           }
         };
         
@@ -454,40 +474,16 @@ export default function HomeScreen() {
     
     const fetchNewReleases = async () => {
       if (countryLoading || !activeRegion) return;
-      let query = 'Latest ';
-      if (subRegion) query += `${subRegion} `;
-      else if (activeRegion && activeRegion !== 'India' && activeRegion !== 'your country') query += `${activeRegion} `;
-      else if (activeRegion === 'India') query += `Hindi `;
-      if (musicStyle) query += `${musicStyle} `;
-      
-      query += ` ${new Date().getFullYear()}`;
+      const queryName = getSearchTermForFilters('new');
       
       try {
-        const queryName = query.trim();
-        const albumRes = await MusicAPI.search({ q: queryName, type: 'album' });
-        let finalTracks: Track[] = [];
-        
-        if (albumRes.albums && albumRes.albums.length > 0) {
-          const albumPromises = albumRes.albums.slice(0, 3).map(a => MusicAPI.getAlbumSongs(a.id));
-          const albumResults = await Promise.allSettled(albumPromises);
-          
-          for (const res of albumResults) {
-            if (res.status === 'fulfilled' && res.value && res.value.length > 0) {
-              finalTracks = [...finalTracks, ...res.value];
-            }
-          }
-        }
-        
-        if (finalTracks.length === 0) {
-          const fallbackQuery = queryName.replace('Latest', '').replace(new Date().getFullYear().toString(), '').trim();
-          const res = await MusicAPI.searchTracks(fallbackQuery, 1, 15);
-          finalTracks = res.tracks || [];
-        }
+        const res = await MusicAPI.searchTracks(queryName, 1, 30);
+        const finalTracks = res.tracks || [];
         
         if (isMounted && finalTracks && finalTracks.length > 0) {
           const seen = new Set<string>();
           const dedupedTracks = finalTracks.filter(t => {
-            if (!isRecentTrack(t, 6)) return false;
+            if (!isRecentTrack(t, 12)) return false;
             const key = `${t.title?.toLowerCase().trim()}|${t.artist?.toLowerCase().trim()}`;
             const idKey = t.id.toString();
             if (seen.has(key) || seen.has(idKey)) return false;
@@ -501,9 +497,39 @@ export default function HomeScreen() {
         console.error('Failed to fetch new releases', e);
       }
     };
+
+    const fetchRandomTracks = async () => {
+      if (countryLoading || !activeRegion) return;
+      setIsRandomLoading(true);
+      const queryName = getSearchTermForFilters('random');
+      try {
+        const randomPage = Math.floor(Math.random() * 3) + 1;
+        const res = await MusicAPI.searchTracks(queryName, randomPage, 30);
+        const tracks = res.tracks || [];
+        if (isMounted && tracks.length > 0) {
+          // Shuffle tracks randomly
+          const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+          const seen = new Set<string>();
+          const dedupedTracks = shuffled.filter(t => {
+            const key = `${t.title?.toLowerCase().trim()}|${t.artist?.toLowerCase().trim()}`;
+            const idKey = t.id.toString();
+            if (seen.has(key) || seen.has(idKey)) return false;
+            seen.add(key);
+            seen.add(idKey);
+            return true;
+          });
+          setRandomTracks(dedupedTracks);
+        }
+      } catch (e) {
+        console.error('Failed to fetch random tracks', e);
+      } finally {
+        if (isMounted) setIsRandomLoading(false);
+      }
+    };
     
     if (activeRegion) {
       void fetchNewReleases();
+      void fetchRandomTracks();
     }
 
     return () => { isMounted = false; };
@@ -632,7 +658,7 @@ export default function HomeScreen() {
                 )}
 
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, marginBottom: 12 }}>
-                  {['Pop', 'Hip Hop', 'Rock', 'Acoustic', 'Devotional', 'Classical', 'Lofi'].map((style) => (
+                  {['Pop', 'Hip Hop', 'Rock', 'Anime', 'Acoustic', 'Devotional', 'Classical', 'Lofi'].map((style) => (
                     <TouchableOpacity
                       key={style}
                       style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: musicStyle === style ? theme.accent : theme.border, backgroundColor: musicStyle === style ? theme.accent : theme.surface }}
@@ -669,6 +695,19 @@ export default function HomeScreen() {
                 <HorizontalTrackList
                   title=""
                   tracks={newReleasesTracks}
+                  onTrackSelect={handleHomeTrackSelect}
+                  isPlaying={isPlaying}
+                  currentTrack={currentTrack}
+                />
+              </View>
+            )}
+
+            {randomTracks.length > 0 && (
+              <View style={{ marginTop: 16 }}>
+                <SectionHeader title="Discover Random" />
+                <HorizontalTrackList
+                  title=""
+                  tracks={randomTracks}
                   onTrackSelect={handleHomeTrackSelect}
                   isPlaying={isPlaying}
                   currentTrack={currentTrack}
@@ -893,7 +932,7 @@ export default function HomeScreen() {
           <View style={[styles.setupLanguageModalCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <Text style={[styles.setupSectionTitle, { color: theme.textPrimary, marginBottom: 12 }]}>{t('settings.region')}</Text>
             <FlatList
-              data={['auto', ...Object.keys(regionUrlMap)]}
+              data={['auto', 'Anime', ...Object.keys(regionUrlMap)]}
               keyExtractor={(item) => item}
               renderItem={({ item }) => {
                 const active = regionOverride === item;
