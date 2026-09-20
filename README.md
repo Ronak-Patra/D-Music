@@ -93,7 +93,7 @@ D-Music natively supports full UI translation across **23 official languages**, 
 
 You can download the compiled Android APK directly from the project repository:
 
-📦 **Latest Release:** [Download DMusic-Release.apk](https://github.com/Ronak-Patra/D-Music/blob/main/DMusic-Release.apk)
+📦 **Latest Release:** [Download DMusic-Release.apk](https://github.com/Ronak-Patra/D-Music/releases)
 
 ### Installation Steps:
 1. Download the `DMusic-Release.apk` file onto your Android device.
