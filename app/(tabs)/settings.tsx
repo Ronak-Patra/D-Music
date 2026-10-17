@@ -25,14 +25,14 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemeMode, useThemeMode } from '@/hooks/theme-mode';
 import { useApiStatus } from '@/hooks/useApiStatus';
 import { useToast } from '@/hooks/useToast';
-const CURRENT_VERSION = '3.1.5';
+const CURRENT_VERSION = '4.0.0';
 const LINKEDIN_URL = 'https://www.linkedin.com/in/jash-gro/';
 const TELEGRAM_URL = 'https://telegram.dog/deveIoper_x';
 const INSTAGRAM_URL = 'https://www.instagram.com/jash_gro/';
 const YOUTUBE_URL = 'https://www.youtube.com/@nerdsClub';
 const TWITTER_URL = 'https://twitter.com/jash_gro';
-const GITHUB_URL = 'https://github.com/BlackHatDevX';
-const UPDATE_CONFIG_URL = 'https://raw.githubusercontent.com/BlackHatDevX/openspot-config/refs/heads/main/update-mobile.json';
+const GITHUB_URL = 'https://github.com/Ronak-Patra/D-Music';
+const UPDATE_CONFIG_URL = '';
 const KWORD_URL = 'https://kworb.net/spotify/';
 const REGION_OVERRIDE_KEY = 'openspot_region_override_v1';
 const REGION_URL_MAP_KEY = 'openspot_region_url_map_v1';
@@ -183,6 +183,9 @@ export default function SettingsScreen() {
   };
 
   const checkForUpdates = useCallback(async () => {
+    if (!UPDATE_CONFIG_URL) {
+      return;
+    }
     setIsCheckingUpdate(true);
     try {
       const res = await fetch(UPDATE_CONFIG_URL);

@@ -56,34 +56,65 @@ function AppNavigation() {
   );
 }
 
+import { View, Image, Animated, StyleSheet } from 'react-native';
+import { useState, useRef } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 export default function RootLayout() {
   const [loaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
+  const [isSplashVisible, setIsSplashVisible] = useState(true);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (loaded) {
-      setTimeout(() => {
-        SplashScreen.hideAsync();
-      }, 3000);
+      // Hide native splash screen so the JS overlay smoothly takes over
+      SplashScreen.hideAsync().catch(() => {});
+
+      const timer = setTimeout(() => {
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 350,
+          useNativeDriver: true,
+        }).start(() => {
+          setIsSplashVisible(false);
+        });
+      }, 1500);
+
+      return () => clearTimeout(timer);
     }
   }, [loaded]);
 
-  if (!loaded) {
-    return null;
-  }
-
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#000000' }}>
       <ErrorBoundary>
         <SafeAreaProvider>
           <ThemeModeProvider>
-            <AppNavigation />
+            {loaded && <AppNavigation />}
           </ThemeModeProvider>
         </SafeAreaProvider>
       </ErrorBoundary>
+      {isSplashVisible && (
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFillObject,
+            {
+              backgroundColor: '#000000',
+              justifyContent: 'center',
+              alignItems: 'center',
+              opacity: fadeAnim,
+              zIndex: 999999,
+            },
+          ]}
+          pointerEvents="none"
+        >
+          <Image
+            source={require('../assets/images/splash-icon.png')}
+            style={{ width: 220, height: 220, resizeMode: 'contain' }}
+          />
+        </Animated.View>
+      )}
     </GestureHandlerRootView>
   );
 }

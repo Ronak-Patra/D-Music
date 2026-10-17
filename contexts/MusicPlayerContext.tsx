@@ -1,4 +1,6 @@
-import React, { createContext, useState, useRef, useMemo } from 'react';
+import React, { createContext, useState, useRef, useMemo, useEffect } from 'react';
+import { AppState } from 'react-native';
+import TrackPlayer, { Event } from 'react-native-track-player';
 import { Track } from '@/types/music';
 import { useMusicQueue } from '@/hooks/useMusicQueue';
 import { useDynamicColors } from '@/hooks/useDynamicColors';
@@ -51,6 +53,54 @@ export const MusicPlayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     () => musicQueue.tracks[musicQueue.currentIndex] ?? null,
     [musicQueue.tracks, musicQueue.currentIndex]
   );
+
+  // Keep currentTrack and musicQueue synchronized with TrackPlayer during background track changes and foreground returns
+  useEffect(() => {
+    const syncActiveTrack = async () => {
+      try {
+        const active = await TrackPlayer.getActiveTrack();
+        if (!active?.id) return;
+        const tracks = musicQueue.tracks;
+        if (!tracks?.length) return;
+        const idx = tracks.findIndex(t => String(t.id) === String(active.id));
+        if (idx !== -1 && idx !== musicQueue.currentIndex) {
+          musicQueue.setCurrentIndex(idx);
+          const currentT = tracks[idx];
+          if (currentT) {
+            void MusicAPI.addToRecentlyPlayed(currentT);
+          }
+        }
+      } catch (err) {
+        console.warn('[MusicPlayerContext] Background sync error:', err);
+      }
+    };
+
+    const sub = TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, async (event) => {
+      const active = event.track || await TrackPlayer.getActiveTrack();
+      if (!active?.id) return;
+      const tracks = musicQueue.tracks;
+      if (!tracks?.length) return;
+      const idx = tracks.findIndex(t => String(t.id) === String(active.id));
+      if (idx !== -1 && idx !== musicQueue.currentIndex) {
+        musicQueue.setCurrentIndex(idx);
+        const currentT = tracks[idx];
+        if (currentT) {
+          void MusicAPI.addToRecentlyPlayed(currentT);
+        }
+      }
+    });
+
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void syncActiveTrack();
+      }
+    });
+
+    return () => {
+      sub.remove();
+      appStateSub.remove();
+    };
+  }, [musicQueue.tracks, musicQueue.currentIndex]);
 
   const { dynamicColorsEnabled, toggleDynamicColors, songColor } = useDynamicColors(currentTrack);
 

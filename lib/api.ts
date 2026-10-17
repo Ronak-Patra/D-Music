@@ -664,6 +664,126 @@ export class MusicApi {
     }
   }
 
+  static isPodcastOrNonMusic(item: any): boolean {
+    if (!item) return false;
+    if (item.type === 'podcast' || item.type === 'episode' || item.type === 'show' || item.type === 'audiobook') return true;
+    if (item.is_podcast === true || item.is_podcast === '1' || item.more_info?.is_podcast === true || item.more_info?.is_podcast === '1') return true;
+    if (item.more_info?.type === 'podcast' || item.more_info?.type === 'episode' || item.more_info?.type === 'show') return true;
+    if (item.list_type === 'podcast') return true;
+
+    // Filter by duration: songs are between 35s and 900s (15 mins).
+    // Note: Track objects store duration in milliseconds (> 10000), while raw API objects store in seconds.
+    const rawDur = item.duration || item.more_info?.duration || 0;
+    let durationSec = typeof rawDur === 'number' ? rawDur : parseInt(String(rawDur), 10);
+    if (durationSec > 10000) {
+      durationSec = Math.round(durationSec / 1000);
+    }
+    if (durationSec > 900) return true; // podcasts/audiobooks/talk shows over 15 mins
+    if (durationSec > 0 && durationSec < 35) return true; // audio teasers/trailers/jingles under 35s
+
+    const title = (item.title || item.song || item.name || '').toLowerCase();
+    const subtitle = (item.subtitle || item.artist || item.description || item.header_desc || '').toLowerCase();
+    const album = (item.album || item.albumTitle || item.more_info?.album || '').toLowerCase();
+    const testStr = `${title} ${subtitle} ${album}`;
+
+    if (/\b(podcast|episode|ep\s*\d+|audiobook|audio story|audio cinema|kahaani|kahani|kahaaniyan|kahaniya|dastan|crime patrol|horror story|talk show|full episode|season\s*\d+|s\d+\s*e\d+|pravachan|bhajan katha|samvaad|interview|trailer|teaser|promo|preview|prevue|dialogue|dialogues|motion poster|soundtrack commentary|behind the scenes|making of)\b/i.test(testStr)) {
+      return true;
+    }
+    return false;
+  }
+
+  static async getNewReleases(languages = 'hindi,english', limit = 40, genre = ''): Promise<Track[]> {
+    try {
+      let albums: any[] = [];
+      const currentYear = new Date().getFullYear();
+      if (genre) {
+        try {
+          const searchData = await fetchJioSaavn('search.getAlbumResults', {
+            q: `${genre} ${languages.split(',')[0]} ${currentYear}`,
+            n: 20,
+            p: 1,
+          });
+          albums = searchData?.results || searchData?.data || [];
+        } catch {
+          albums = [];
+        }
+      }
+
+      if (!albums || albums.length === 0) {
+        const data = await fetchJioSaavn('content.getAlbums', {
+          n: 25,
+          p: 1,
+          languages: languages.toLowerCase(),
+        });
+        albums = data?.data || (Array.isArray(data) ? data : []);
+      }
+
+      if (!Array.isArray(albums) || albums.length === 0) return [];
+
+      // Strictly filter out podcast / show / audiobook albums
+      const musicAlbums = albums.filter((album: any) => !this.isPodcastOrNonMusic(album));
+
+      const albumSongPromises = musicAlbums.slice(0, 15).map(async (album: any) => {
+        try {
+          const targetAlbumId = album.more_info?.album_id || album.albumid || album.id;
+          const albumDetails = await fetchJioSaavn('content.getAlbumDetails', { albumid: targetAlbumId });
+          const songs = albumDetails?.list || albumDetails?.songs || [];
+          const albumReleaseDate = album.more_info?.release_date || albumDetails?.more_info?.release_date || albumDetails?.release_date || album.year || '';
+          return songs
+            .filter((s: any) => !this.isPodcastOrNonMusic(s))
+            .map((s: any) => {
+              const track = this.transformSongToTrack(s);
+              if (!track.releaseDate && albumReleaseDate) {
+                track.releaseDate = albumReleaseDate;
+              }
+              return track;
+            });
+        } catch {
+          return [];
+        }
+      });
+
+      const albumSongLists = await Promise.all(albumSongPromises);
+      const tracks: Track[] = [];
+      const seen = new Set<string>();
+
+      for (const list of albumSongLists) {
+        for (const t of list) {
+          if (this.isPodcastOrNonMusic(t)) continue;
+          const key = `${t.title?.toLowerCase().trim()}|${t.artist?.toLowerCase().trim()}`;
+          const idKey = String(t.id);
+          if (!seen.has(key) && !seen.has(idKey)) {
+            seen.add(key);
+            seen.add(idKey);
+            tracks.push(t);
+          }
+        }
+      }
+
+      const parseTimestamp = (dateStr?: string): number => {
+        if (!dateStr) return 0;
+        let parsed = new Date(dateStr).getTime();
+        if (!isNaN(parsed)) return parsed;
+        const dmyMatch = dateStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+        if (dmyMatch) {
+          const [, day, month, year] = dmyMatch;
+          parsed = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`).getTime();
+          if (!isNaN(parsed)) return parsed;
+        }
+        if (/^\d{4}$/.test(dateStr)) return new Date(`${dateStr}-01-01`).getTime();
+        return 0;
+      };
+
+      // Keep only tracks with a valid release date and sort newest first
+      const validDatedTracks = tracks.filter(t => parseTimestamp(t.releaseDate) > 0);
+      validDatedTracks.sort((a, b) => parseTimestamp(b.releaseDate) - parseTimestamp(a.releaseDate));
+      return validDatedTracks.slice(0, limit);
+    } catch (e) {
+      console.error('Failed to get new releases:', e);
+      return [];
+    }
+  }
+
   static clearCache(): void {
     this.searchCache.clear();
     this.streamCache.clear();

@@ -38,6 +38,7 @@ import { LyricsView } from './LyricsView';
 import { fetchLyrics, LyricsData } from '../lib/lyrics-api';
 import { useSleepTimer } from '../hooks/useSleepTimer';
 import * as Sharing from 'expo-sharing';
+import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
 
 const ROTATING_COVER_KEY = 'openspot_rotating_cover_v1';
@@ -158,6 +159,12 @@ export const FullScreenPlayer = memo(function FullScreenPlayer({
   const [gesturesEnabled, setGesturesEnabled] = useState<boolean>(true);
 
   const albumScaleAnim = useRef(new Animated.Value(1)).current;
+  const swipeAnim = useRef(new Animated.Value(0)).current;
+  const swipeOpacity = swipeAnim.interpolate({
+    inputRange: [-windowWidth * 0.5, 0, windowWidth * 0.5],
+    outputRange: [0.6, 1, 0.6],
+    extrapolate: 'clamp',
+  });
   const likeScaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -613,6 +620,168 @@ export const FullScreenPlayer = memo(function FullScreenPlayer({
     </Modal>
   );
 
+  const getCleanLyricsContent = () => {
+    let raw = '';
+    if (lyrics?.plainLyrics) {
+      raw = lyrics.plainLyrics;
+    } else if (lyrics?.syncedLyrics) {
+      raw = lyrics.syncedLyrics.replace(/\[\d+:\d+\.\d+\]/g, '').trim();
+    }
+    return raw;
+  };
+
+  const exportLyricsAsTxt = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        showToast('Sharing is not available on this device', 'error');
+        return;
+      }
+      const rawText = getCleanLyricsContent();
+      const contentToExport = `Title: ${track?.title || 'Unknown'}\nArtist: ${track?.artist || 'Unknown'}\nAlbum: ${track?.albumTitle || ''}\n\n${rawText}`;
+      const safeTitle = (track?.title || 'lyrics').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const fileUri = `${FileSystem.documentDirectory}${safeTitle}_lyrics.txt`;
+      await FileSystem.writeAsStringAsync(fileUri, contentToExport, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      await Sharing.shareAsync(fileUri, {
+        mimeType: 'text/plain',
+        dialogTitle: `Export Lyrics: ${track?.title}`,
+        UTI: 'public.plain-text',
+      });
+      showToast('Lyrics exported as TXT', 'success');
+    } catch (err) {
+      console.error('Failed to export lyrics as TXT:', err);
+      showToast('Failed to export lyrics', 'error');
+    }
+  };
+
+  const exportLyricsAsPdf = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        showToast('Sharing is not available on this device', 'error');
+        return;
+      }
+      const rawText = getCleanLyricsContent();
+      const safeLyricsHtml = rawText
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br/>');
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8" />
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              padding: 36px;
+              color: #1a1a1a;
+              background-color: #ffffff;
+            }
+            .header {
+              border-bottom: 2px solid #1DB954;
+              padding-bottom: 14px;
+              margin-bottom: 20px;
+            }
+            .title {
+              font-size: 24px;
+              font-weight: 700;
+              color: #111111;
+              margin: 0 0 4px 0;
+            }
+            .artist {
+              font-size: 16px;
+              color: #1DB954;
+              margin: 0 0 4px 0;
+            }
+            .album {
+              font-size: 13px;
+              color: #777777;
+              margin: 0;
+            }
+            .lyrics {
+              font-size: 14px;
+              line-height: 1.8;
+              color: #2c3e50;
+              margin-top: 16px;
+            }
+            .footer {
+              margin-top: 36px;
+              padding-top: 12px;
+              border-top: 1px solid #eeeeee;
+              font-size: 11px;
+              color: #999999;
+              text-align: center;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1 class="title">${track?.title || 'Unknown Title'}</h1>
+            <h2 class="artist">${track?.artist || 'Unknown Artist'}</h2>
+            ${track?.albumTitle ? `<p class="album">Album: ${track.albumTitle}</p>` : ''}
+          </div>
+          <div class="lyrics">
+            ${safeLyricsHtml}
+          </div>
+          <div class="footer">
+            Exported from D Music
+          </div>
+        </body>
+        </html>
+      `;
+
+      const { uri: tempPdfUri } = await Print.printToFileAsync({ html });
+      const safeTitle = (track?.title || 'lyrics').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const targetPdfUri = `${FileSystem.documentDirectory}${safeTitle}_lyrics.pdf`;
+      await FileSystem.copyAsync({
+        from: tempPdfUri,
+        to: targetPdfUri,
+      });
+      await Sharing.shareAsync(targetPdfUri, {
+        mimeType: 'application/pdf',
+        dialogTitle: `Export Lyrics: ${track?.title}`,
+        UTI: 'com.adobe.pdf',
+      });
+      showToast('Lyrics exported as PDF', 'success');
+    } catch (err) {
+      console.error('Failed to export lyrics as PDF:', err);
+      showToast('Failed to export lyrics as PDF', 'error');
+    }
+  };
+
+  const handleExportLyrics = () => {
+    if (!lyrics || (!lyrics.plainLyrics && !lyrics.syncedLyrics)) {
+      showToast('No lyrics available to export', 'error');
+      return;
+    }
+
+    Alert.alert(
+      'Export Lyrics',
+      'Choose the format to export lyrics:',
+      [
+        {
+          text: 'PDF Document (.pdf)',
+          onPress: () => void exportLyricsAsPdf(),
+        },
+        {
+          text: 'Text File (.txt)',
+          onPress: () => void exportLyricsAsTxt(),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
   const LyricsModalView = (
     <Modal
       visible={showLyricsModal}
@@ -627,7 +796,9 @@ export const FullScreenPlayer = memo(function FullScreenPlayer({
               <Ionicons name="chevron-down" size={32} color={theme.textPrimary} />
             </TouchableOpacity>
             <Text style={[styles.modalTitle, { color: theme.textPrimary, marginBottom: 0 }]}>Lyrics</Text>
-            <View style={{ width: 32 }} />
+            <TouchableOpacity onPress={handleExportLyrics} style={{ padding: 6 }}>
+              <Ionicons name="share-outline" size={24} color={theme.accent} />
+            </TouchableOpacity>
           </View>
           {fetchingLyrics ? (
             <View style={styles.lyricsCenter}>
@@ -741,7 +912,7 @@ export const FullScreenPlayer = memo(function FullScreenPlayer({
                     height: 44,
                     borderRadius: 12,
                     borderWidth: 1,
-                    borderColor: theme.border,
+                    borderColor: theme.glassBorder,
                     backgroundColor: theme.glass,
                     color: theme.textPrimary,
                     paddingHorizontal: 12,
@@ -807,19 +978,126 @@ export const FullScreenPlayer = memo(function FullScreenPlayer({
     );
   })();
 
+  const onNextRef = useRef(onNext);
+  const onPreviousRef = useRef(onPrevious);
+  const gesturesEnabledRef = useRef(gesturesEnabled);
+
+  const currentIndex = musicQueue?.currentIndex ?? -1;
+  const queueTracks = (musicQueue?.tracks as Track[]) ?? [];
+  const prevTrack = currentIndex > 0 ? queueTracks[currentIndex - 1] : null;
+  const nextTrack = currentIndex >= 0 && currentIndex < queueTracks.length - 1 ? queueTracks[currentIndex + 1] : null;
+
+  const prevTrackRef = useRef(prevTrack);
+  const nextTrackRef = useRef(nextTrack);
+  const isTransitioningRef = useRef(false);
+  const albumSizeRef = useRef(albumSize);
+  albumSizeRef.current = albumSize;
+
+  useEffect(() => {
+    onNextRef.current = onNext;
+    onPreviousRef.current = onPrevious;
+    gesturesEnabledRef.current = gesturesEnabled;
+  }, [onNext, onPrevious, gesturesEnabled]);
+
+  useEffect(() => {
+    prevTrackRef.current = prevTrack;
+    nextTrackRef.current = nextTrack;
+  }, [prevTrack, nextTrack]);
+
+  useEffect(() => {
+    swipeAnim.setValue(0);
+    isTransitioningRef.current = false;
+  }, [track?.id]);
+
+  const GAP = 28;
+  const offsetDist = albumSize + GAP;
+
   const panResponderRef = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        // We evaluate gesturesEnabled right away
-        return Math.abs(gestureState.dx) > 10;
+      onStartShouldSetPanResponder: () => gesturesEnabledRef.current && !isTransitioningRef.current,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return (
+          gesturesEnabledRef.current &&
+          !isTransitioningRef.current &&
+          (Math.abs(gestureState.dx) > 10 || Math.abs(gestureState.vx) > 0.1)
+        );
       },
-      onPanResponderRelease: (evt, gestureState) => {
-        if (gestureState.dx > 30) {
-          onPrevious(); // Swipe right -> Previous track
-        } else if (gestureState.dx < -30) {
-          onNext(); // Swipe left -> Next track
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        return (
+          gesturesEnabledRef.current &&
+          !isTransitioningRef.current &&
+          Math.abs(gestureState.dx) > 12 &&
+          Math.abs(gestureState.dx) > Math.abs(gestureState.dy)
+        );
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (isTransitioningRef.current) return;
+        let dx = gestureState.dx;
+        // Rubber band if no track to transition to in that direction
+        if (dx < 0 && !nextTrackRef.current) {
+          dx = dx * 0.25;
+        } else if (dx > 0 && !prevTrackRef.current) {
+          dx = dx * 0.25;
         }
+        swipeAnim.setValue(dx);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (isTransitioningRef.current) return;
+        const SWIPE_THRESHOLD = 50;
+        const targetOffset = albumSizeRef.current + 28;
+
+        if ((gestureState.dx < -SWIPE_THRESHOLD || gestureState.vx < -0.3) && nextTrackRef.current) {
+          // Swipe left -> Next track (strictly 1 track at a time)
+          isTransitioningRef.current = true;
+          Animated.timing(swipeAnim, {
+            toValue: -targetOffset,
+            duration: 180,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }).start(() => {
+            onNextRef.current?.();
+            swipeAnim.setValue(0);
+            setTimeout(() => {
+              isTransitioningRef.current = false;
+            }, 250);
+          });
+        } else if ((gestureState.dx > SWIPE_THRESHOLD || gestureState.vx > 0.3) && prevTrackRef.current) {
+          // Swipe right -> Previous track (strictly 1 track at a time)
+          isTransitioningRef.current = true;
+          Animated.timing(swipeAnim, {
+            toValue: targetOffset,
+            duration: 180,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }).start(() => {
+            onPreviousRef.current?.();
+            swipeAnim.setValue(0);
+            setTimeout(() => {
+              isTransitioningRef.current = false;
+            }, 250);
+          });
+        } else {
+          // Spring back smoothly to center
+          Animated.spring(swipeAnim, {
+            toValue: 0,
+            friction: 7,
+            tension: 50,
+            useNativeDriver: true,
+          }).start(() => {
+            isTransitioningRef.current = false;
+          });
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(swipeAnim, {
+          toValue: 0,
+          friction: 7,
+          tension: 50,
+          useNativeDriver: true,
+        }).start(() => {
+          isTransitioningRef.current = false;
+        });
       },
     })
   ).current;
@@ -901,27 +1179,75 @@ export const FullScreenPlayer = memo(function FullScreenPlayer({
                 </View>
               </View>
             ) : (
-            <View style={[
-              styles.content,
-              isLandscape ? styles.contentLandscape : styles.contentPortrait,
-            ]}>
-              {/* Album Art Container with PanResponder */}
+            <View 
+              style={[
+                styles.content,
+                isLandscape ? styles.contentLandscape : styles.contentPortrait,
+              ]}>
+              {/* Album Art Container with 3-track sliding carousel */}
               <View 
                 {...(gesturesEnabled ? panResponderRef.panHandlers : {})}
                 style={[
                   styles.albumArtContainer,
+                  { height: albumSize, width: '100%', overflow: 'hidden' },
                   isLandscape && { width: albumSize, height: albumSize, marginBottom: 0, flexShrink: 0 },
                 ]}
               >
+                {/* Previous track artwork (slides in from left when swiping right) */}
+                {prevTrack && (
+                  <Animated.View
+                    style={[
+                      {
+                        position: 'absolute',
+                        width: albumSize,
+                        height: albumSize,
+                        borderRadius: 24,
+                        padding: 4,
+                        transform: [
+                          {
+                            translateX: Animated.add(swipeAnim, new Animated.Value(-offsetDist)),
+                          },
+                        ],
+                        opacity: swipeAnim.interpolate({
+                          inputRange: [0, offsetDist],
+                          outputRange: [0.35, 1],
+                          extrapolate: 'clamp',
+                        }),
+                      },
+                    ]}
+                    pointerEvents="none"
+                  >
+                    <View style={styles.albumArtShadowRing} />
+                    <View style={styles.albumArtGlass}>
+                      <Image
+                        source={{
+                          uri:
+                            (prevTrack as any).offlineThumbUri ||
+                            MusicAPI.getOptimalImage(prevTrack.images) ||
+                            'https://via.placeholder.com/400x400/1e1e1e/b3b3b3?text=No+Cover',
+                        }}
+                        style={styles.albumArt}
+                        contentFit="cover"
+                      />
+                    </View>
+                  </Animated.View>
+                )}
+
+                {/* Current track artwork */}
                 <Animated.View
                   style={[
                     {
-                      borderRadius: 24,
-                      padding: 4,
+                      position: 'absolute',
                       width: albumSize,
                       height: albumSize,
+                      borderRadius: 24,
+                      padding: 4,
+                      transform: [
+                        { scale: albumScaleAnim },
+                        { translateX: swipeAnim },
+                      ],
+                      opacity: swipeOpacity,
                     },
-                    { transform: [{ scale: albumScaleAnim }] },
                   ]}
                 >
                   <View style={styles.albumArtShadowRing} />
@@ -939,6 +1265,46 @@ export const FullScreenPlayer = memo(function FullScreenPlayer({
                     />
                   </Animated.View>
                 </Animated.View>
+
+                {/* Next track artwork (slides in from right when swiping left) */}
+                {nextTrack && (
+                  <Animated.View
+                    style={[
+                      {
+                        position: 'absolute',
+                        width: albumSize,
+                        height: albumSize,
+                        borderRadius: 24,
+                        padding: 4,
+                        transform: [
+                          {
+                            translateX: Animated.add(swipeAnim, new Animated.Value(offsetDist)),
+                          },
+                        ],
+                        opacity: swipeAnim.interpolate({
+                          inputRange: [-offsetDist, 0],
+                          outputRange: [1, 0.35],
+                          extrapolate: 'clamp',
+                        }),
+                      },
+                    ]}
+                    pointerEvents="none"
+                  >
+                    <View style={styles.albumArtShadowRing} />
+                    <View style={styles.albumArtGlass}>
+                      <Image
+                        source={{
+                          uri:
+                            (nextTrack as any).offlineThumbUri ||
+                            MusicAPI.getOptimalImage(nextTrack.images) ||
+                            'https://via.placeholder.com/400x400/1e1e1e/b3b3b3?text=No+Cover',
+                        }}
+                        style={styles.albumArt}
+                        contentFit="cover"
+                      />
+                    </View>
+                  </Animated.View>
+                )}
               </View>
 
               {/* Right panel: info + controls */}

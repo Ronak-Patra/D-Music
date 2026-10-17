@@ -52,6 +52,9 @@ export const LyricsView: React.FC<LyricsViewProps> = ({
     }
   }, [lyricsData]);
 
+  const [isUserScrolling, setIsUserScrolling] = useState<boolean>(false);
+  const userScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (parsedLyrics.length > 0) {
       const currentTime = progress.position;
@@ -67,16 +70,33 @@ export const LyricsView: React.FC<LyricsViewProps> = ({
 
       if (newActiveIndex !== activeIndex) {
         setActiveIndex(newActiveIndex);
-        // Auto scroll to the active line (roughly index * line height)
-        if (newActiveIndex >= 0 && scrollViewRef.current) {
+        // Auto scroll only if user is not currently scrolling manually
+        if (!isUserScrolling && newActiveIndex >= 0 && scrollViewRef.current) {
           scrollViewRef.current.scrollTo({
-            y: newActiveIndex * 40 - 100, // adjust offset to center
+            y: Math.max(0, newActiveIndex * 48 - 120),
             animated: true,
           });
         }
       }
     }
-  }, [progress.position, parsedLyrics, activeIndex]);
+  }, [progress.position, parsedLyrics, activeIndex, isUserScrolling]);
+
+  const handleScrollBeginDrag = () => {
+    setIsUserScrolling(true);
+    if (userScrollTimeoutRef.current) {
+      clearTimeout(userScrollTimeoutRef.current);
+      userScrollTimeoutRef.current = null;
+    }
+  };
+
+  const handleScrollEndDrag = () => {
+    if (userScrollTimeoutRef.current) clearTimeout(userScrollTimeoutRef.current);
+    // Allow user to freely browse lyrics for 5 seconds before resuming auto-follow
+    userScrollTimeoutRef.current = setTimeout(() => {
+      setIsUserScrolling(false);
+      userScrollTimeoutRef.current = null;
+    }, 5000);
+  };
 
   if (!lyricsData) {
     return (
@@ -88,7 +108,14 @@ export const LyricsView: React.FC<LyricsViewProps> = ({
 
   if (parsedLyrics.length === 0 && lyricsData.plainLyrics) {
     return (
-      <ScrollView style={styles.container}>
+      <ScrollView
+        style={styles.container}
+        onScrollBeginDrag={handleScrollBeginDrag}
+        onScrollEndDrag={handleScrollEndDrag}
+        onMomentumScrollBegin={handleScrollBeginDrag}
+        onMomentumScrollEnd={handleScrollEndDrag}
+        scrollEventThrottle={16}
+      >
         <Text style={[styles.plainLyrics, { color: textColor }]}>
           {lyricsData.plainLyrics}
         </Text>
@@ -97,7 +124,16 @@ export const LyricsView: React.FC<LyricsViewProps> = ({
   }
 
   return (
-    <ScrollView ref={scrollViewRef} style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      ref={scrollViewRef}
+      style={styles.container}
+      showsVerticalScrollIndicator={true}
+      onScrollBeginDrag={handleScrollBeginDrag}
+      onScrollEndDrag={handleScrollEndDrag}
+      onMomentumScrollBegin={handleScrollBeginDrag}
+      onMomentumScrollEnd={handleScrollEndDrag}
+      scrollEventThrottle={16}
+    >
       <View style={styles.paddingView} />
       {parsedLyrics.map((line, index) => (
         <Text

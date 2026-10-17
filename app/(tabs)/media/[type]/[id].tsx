@@ -118,7 +118,7 @@ export default function MediaDetailsScreen() {
   const title = normalizeParam(params.title) || 'Details';
   const coverImage = normalizeParam(params.image) || '';
   const fromPath = normalizeParam(params.from);
-  const isOfflineMode = normalizeParam(params.offline) === 'true';
+  const isOfflineMode = normalizeParam((params as any).offline) === 'true';
 
   const [tracks, setTracks] = useState<Track[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -238,14 +238,30 @@ export default function MediaDetailsScreen() {
     };
   }, [mediaId, mediaType, isOfflineMode]);
 
+  const recordPlaylistPlay = () => {
+    if (mediaType === 'playlist' || mediaType === 'album') {
+      const bestImage = coverImage || MusicAPI.getOptimalImage(tracks[0]?.images) || '';
+      const bestTitle = (title && title !== 'Details') ? title : (tracks[0]?.albumTitle || 'Playlist');
+      void MusicAPI.addToRecentlyPlayedPlaylists({
+        id: mediaId,
+        title: bestTitle,
+        name: bestTitle,
+        image: bestImage,
+        songCount: totalSongs || tracks.length,
+      });
+    }
+  };
+
   const handlePlayAll = () => {
     if (tracks.length > 0) {
+      recordPlaylistPlay();
       handleTrackSelect(tracks[0], tracks, 0);
     }
   };
 
   const handleShufflePlay = () => {
     if (tracks.length > 0) {
+      recordPlaylistPlay();
       const shuffled = [...tracks].sort(() => Math.random() - 0.5);
       const randomIndex = Math.floor(Math.random() * shuffled.length);
       handleTrackSelect(shuffled[randomIndex], shuffled, randomIndex);
@@ -361,7 +377,10 @@ export default function MediaDetailsScreen() {
         isPlaying={isPlaying}
         theme={theme}
         tracks={tracks}
-        onTrackSelect={handleTrackSelect}
+        onTrackSelect={(track, list, idx) => {
+          recordPlaylistPlay();
+          handleTrackSelect(track, list, idx);
+        }}
         onToggleLike={toggleLike}
         onAddToQueue={musicQueue.addToQueue}
         isLiked={isLiked(item.id)}

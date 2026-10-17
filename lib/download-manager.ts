@@ -257,6 +257,7 @@ export const DownloadManager = {
     
     // Save playlist metadata JSON inside the master folder
     try {
+        const safePlaylistName = playlistName.replace(/[^a-zA-Z0-9_\- ]/g, '_').trim();
         const existingFiles = await FileSystem.StorageAccessFramework.readDirectoryAsync(masterUri);
         const metaName = `[${safePlaylistName}] metadata.json`;
         let metaUri = existingFiles.find(uri => uri.endsWith(metaName));

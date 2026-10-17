@@ -89,26 +89,8 @@ export default function TabLayout() {
     : null;
 
   useEffect(() => {
-    const checkUpdateOnStart = async () => {
-      try {
-        const res = await fetch(UPDATE_CONFIG_URL);
-        const data: UpdateConfig = await res.json();
-        setUpdateConfig(data);
-
-        const platformConfig = Platform.OS === 'ios' ? data.ios : data.android;
-
-        const isSupported = compareVersions(currentVersion, platformConfig.min_supported_version) >= 0;
-        const hasUpdate = compareVersions(platformConfig.latest_version, currentVersion) > 0;
-
-        if (!isSupported || (platformConfig.force_update && hasUpdate)) {
-          setShowForceUpdate(true);
-        }
-      } catch (error) {
-        console.error('Auto update check failed:', error);
-      }
-    };
-    void checkUpdateOnStart();
-  }, [currentVersion]);
+    // Auto-update checking from openspot repository removed
+  }, []);
 
   return (
     <>

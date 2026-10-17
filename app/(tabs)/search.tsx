@@ -1,4 +1,4 @@
-﻿import React, { useContext, useEffect, useRef } from 'react';
+import React, { useContext, useEffect, useRef } from 'react';
 import { View, StyleSheet, StatusBar, Dimensions, TouchableOpacity, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -41,7 +41,7 @@ export default function SearchScreen() {
 
   const navigation = useNavigation();
   useEffect(() => {
-    const unsubscribe = navigation.addListener('tabPress', (e) => {
+    const unsubscribe = (navigation as any).addListener('tabPress', (e: any) => {
       setQuery('');
       searchState.clearResults();
     });

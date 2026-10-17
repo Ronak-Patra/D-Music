@@ -45,6 +45,14 @@ export class MusicAPI {
     return MusicApi.searchTracks(query, page, limit);
   }
 
+  static async searchPlaylists(query: string, page: number = 1, limit: number = 20): Promise<SearchResponse> {
+    return MusicApi.searchPlaylists(query, page, limit);
+  }
+
+  static async searchAlbums(query: string, page: number = 1, limit: number = 20): Promise<SearchResponse> {
+    return MusicApi.searchAlbums(query, page, limit);
+  }
+
   static async getStreamUrl(trackId: string, trackOrProvider?: Track | 'saavn' | 'ytmusic'): Promise<string> {
     if (typeof trackOrProvider === 'object' && trackOrProvider.provider === 'local') {
       return trackOrProvider.uri || '';
@@ -119,9 +127,52 @@ export class MusicAPI {
     }
   }
 
+  private static recentlyPlayedPlaylistsKey = 'openspot_recently_played_playlists_v1';
+
+  static async getRecentlyPlayedPlaylists(): Promise<any[]> {
+    try {
+      const stored = await AsyncStorage.getItem(this.recentlyPlayedPlaylistsKey);
+      if (!stored) return [];
+      const parsed = JSON.parse(stored);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.error('Failed to read recently played playlists:', error);
+      return [];
+    }
+  }
+
+  static async addToRecentlyPlayedPlaylists(playlist: { id: string; name?: string; title?: string; image?: any; images?: any; songCount?: number; description?: string }): Promise<void> {
+    try {
+      if (!playlist || !playlist.id) return;
+      const existing = await this.getRecentlyPlayedPlaylists();
+      const deduped = existing.filter(p => p.id?.toString() !== playlist.id?.toString());
+      const itemToSave = {
+        id: playlist.id.toString(),
+        name: playlist.name || playlist.title || 'Playlist',
+        title: playlist.name || playlist.title || 'Playlist',
+        image: playlist.image || playlist.images,
+        images: playlist.images || playlist.image,
+        songCount: playlist.songCount,
+        description: playlist.description,
+        playedAt: Date.now(),
+      };
+      const next = [itemToSave, ...deduped].slice(0, 5);
+      await AsyncStorage.setItem(this.recentlyPlayedPlaylistsKey, JSON.stringify(next));
+    } catch (error) {
+      console.error('Failed to save recently played playlist:', error);
+    }
+  }
+
   static async getMadeForYou(): Promise<Track[]> {
-    
     return MusicApi.getMadeForYou();
+  }
+
+  static isPodcastOrNonMusic(item: any): boolean {
+    return MusicApi.isPodcastOrNonMusic(item);
+  }
+
+  static async getNewReleases(languages?: string, limit?: number, genre?: string | null): Promise<Track[]> {
+    return MusicApi.getNewReleases(languages, limit, genre || '');
   }
 
   static async resolveTrackById(trackId: string, preferredProvider?: 'saavn' | 'ytmusic'): Promise<Track | null> {
@@ -157,8 +208,29 @@ export class MusicAPI {
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   }
 
-  static getOptimalImage(images: { small: string; thumbnail: string; large: string }): string {
-    return images.large || images.small || images.thumbnail;
+  static getOptimalImage(images: any): string {
+    if (!images) return '';
+    if (typeof images === 'string') {
+      const trimmed = images.trim();
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('file://') || trimmed.startsWith('data:')) {
+        return trimmed;
+      }
+      return '';
+    }
+    if (Array.isArray(images)) {
+      const best = images.find(img => img?.quality === '500x500') ||
+                   images.find(img => img?.quality === '150x150') ||
+                   images[images.length - 1] ||
+                   images[0];
+      return best?.url || (typeof best === 'string' ? best : '');
+    }
+    if (typeof images === 'object') {
+      return (typeof images.large === 'string' && images.large) ||
+             (typeof images.thumbnail === 'string' && images.thumbnail) ||
+             (typeof images.small === 'string' && images.small) ||
+             '';
+    }
+    return '';
   }
 
   static isHighQuality(track: Track): boolean {

@@ -9,6 +9,7 @@ import {
   Animated,
   ActivityIndicator,
   useWindowDimensions,
+  AppState,
 } from 'react-native';
 import TrackPlayer, { Capability, Event, State, useProgress } from 'react-native-track-player';
 import { Image } from 'expo-image';
@@ -96,6 +97,7 @@ export function Player({
   const isInternalChangeRef = useRef(false);
   const internalChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastNextCallRef = useRef(0);
+  const lastPrevCallRef = useRef(0);
 
   const suppressInternalChanges = useCallback((duration: number = 800) => {
     isInternalChangeRef.current = true;
@@ -297,7 +299,7 @@ export function Player({
   }, [musicQueue]);
 
   const handleNext = useCallback(() => {
-    if (Date.now() - lastNextCallRef.current < 300) return;
+    if (Date.now() - lastNextCallRef.current < 400) return;
     lastNextCallRef.current = Date.now();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const queue = musicQueueRef.current;
@@ -311,6 +313,8 @@ export function Player({
   }, [onPlayingChange, suppressInternalChanges]);
 
   const handlePrevious = useCallback(() => {
+    if (Date.now() - lastPrevCallRef.current < 400) return;
+    lastPrevCallRef.current = Date.now();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const queue = musicQueueRef.current;
     const prevTrack = queue.playPrevious();
@@ -362,19 +366,48 @@ export function Player({
         (t: Track) => t.id.toString() === activeTrack.id
       );
       if (queueIndex >= 0 && musicQueueRef.current.setCurrentIndex) {
-        musicQueueRef.current.setCurrentIndex(queueIndex);
-        try {
-          const { recordPlay } = require('@/lib/stats-tracker');
-          const trackObj = musicQueueRef.current.tracks[queueIndex];
-          if (trackObj) {
+        if (musicQueueRef.current.currentIndex !== queueIndex) {
+          musicQueueRef.current.setCurrentIndex(queueIndex);
+        }
+        const trackObj = musicQueueRef.current.tracks[queueIndex];
+        if (trackObj) {
+          try {
+            void MusicAPI.addToRecentlyPlayed(trackObj);
+            const { recordPlay } = require('@/lib/stats-tracker');
             recordPlay(trackObj, trackObj.duration || 0);
+          } catch (e) {
+            console.error('Failed to record play:', e);
           }
-        } catch (e) {
-          console.error('Failed to record play:', e);
         }
       }
     });
-    return () => sub.remove();
+
+    const appStateSub = AppState.addEventListener('change', async (nextState) => {
+      if (nextState === 'active') {
+        try {
+          const active = await TrackPlayer.getActiveTrack();
+          if (active?.id && musicQueueRef.current?.tracks?.length) {
+            const queueIndex = musicQueueRef.current.tracks.findIndex(
+              (t: Track) => t.id.toString() === active.id
+            );
+            if (queueIndex >= 0 && musicQueueRef.current.currentIndex !== queueIndex) {
+              musicQueueRef.current.setCurrentIndex(queueIndex);
+              const trackObj = musicQueueRef.current.tracks[queueIndex];
+              if (trackObj) {
+                void MusicAPI.addToRecentlyPlayed(trackObj);
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[Player] Foreground sync error:', err);
+        }
+      }
+    });
+
+    return () => {
+      sub.remove();
+      appStateSub.remove();
+    };
   }, []);
 
   
@@ -447,18 +480,14 @@ export function Player({
 
       try {
         if (isSameTrack) {
-          
-          const tpQueue = await TrackPlayer.getQueue();
-          const currentIndexInTp = tpQueue.findIndex(item => item.id === current.id.toString());
-          if (currentIndexInTp !== -1) {
-            for (let i = tpQueue.length - 1; i >= 0; i--) {
-              if (i !== currentIndexInTp) {
-                try {
-                  await TrackPlayer.remove(i);
-                } catch {}
-              }
+          // TrackPlayer is already playing this track (natural queue transition)
+          if (shouldPlayNow) {
+            const state = await TrackPlayer.getPlaybackState();
+            if (state.state !== State.Playing && state.state !== State.Buffering) {
+              await TrackPlayer.play();
             }
           }
+          return;
         } else {
           let currentUrl: string;
           try {
@@ -526,7 +555,8 @@ export function Player({
         const signal = queueBuildAbortRef.current?.signal;
         if (!signal) return;
         try {
-          for (let i = startIndex + 1; i < queueTracks.length; i++) {
+          const forwardStartIndex = queueTracks[startIndex + 1] ? startIndex + 2 : startIndex + 1;
+          for (let i = forwardStartIndex; i < queueTracks.length; i++) {
             if (signal.aborted) break;
             const t = queueTracks[i];
             try {
@@ -548,32 +578,6 @@ export function Player({
                 },
               ]);
             } catch {}
-          }
-          for (let i = startIndex - 1; i >= 0; i--) {
-            if (signal.aborted) break;
-            const t = queueTracks[i];
-            try {
-              const url = await resolveTrackUrl(t);
-              const encodeFileUrl = (uri: string) => {
-                if (uri.startsWith('file://')) {
-                  return 'file://' + uri.substring(7).split('/').map(encodeURIComponent).join('/');
-                }
-                return uri;
-              };
-              await TrackPlayer.add(
-                [
-                  {
-                    id: t.id.toString(),
-                    url: encodeFileUrl(url),
-                    title: t.title || 'Unknown Title',
-                    artist: t.artist || 'Unknown Artist',
-                    artwork: MusicAPI.getOptimalImage(t.images) || undefined,
-                    duration: t.duration ? Math.floor(t.duration / 1000) : undefined,
-                  },
-                ],
-                0
-              );
-            } catch (e) {console.error(e)}
           }
         } catch (error) {
           console.error('[Player] Queue build error (gen:', myGen, '):', error);

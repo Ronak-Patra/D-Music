@@ -168,7 +168,7 @@ export default function LibraryScreen() {
 
   const navigation = useNavigation();
   useEffect(() => {
-    const unsubscribe = navigation.addListener('tabPress', (e) => {
+    const unsubscribe = (navigation as any).addListener('tabPress', (e: any) => {
       // Reset state to default root view
       handleBackToLibrary();
     });
@@ -184,6 +184,14 @@ export default function LibraryScreen() {
   const handlePlaylistPlay = async (playlist: Playlist, shuffle = false) => {
     const tracks = await PlaylistStorage.getPlaylistTracks(playlist);
     if (tracks.length > 0) {
+      const playlistImage = tracks[0]?.albumCover || (tracks[0] as any)?.images || (tracks[0] as any)?.image;
+      void MusicAPI.addToRecentlyPlayedPlaylists({
+        id: (playlist as any).id || playlist.name,
+        name: playlist.name,
+        title: playlist.name,
+        songCount: tracks.length,
+        image: playlistImage,
+      });
       let playTracks = tracks;
       if (shuffle) {
         playTracks = [...tracks].sort(() => Math.random() - 0.5);
