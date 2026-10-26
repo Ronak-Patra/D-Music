@@ -32,9 +32,6 @@ Designed with a sleek dark/light dynamic design system, D-Music allows users to 
 * **Automatic File Sync & Auto-Clean**: Automatic background sync that cleans up missing or manually deleted files from the library database.
 
 ### 🌐 3. Multi-Provider Music Streaming & Discovery
-* **Dual Music Streaming Providers**:
-  * **JioSaavn API Integration**: Access millions of Bollywood, Regional Indian, and International songs, albums, and playlists in high audio quality.
-  * **YouTube Music API Integration (Beta)**: Stream music and audio tracks directly powered by YouTube Music.
 * **Individual Songs Algorithm**: All songs on the Home page are fetched directly as standalone individual song entities — not bundled from playlists or albums. Every section (Trending, New Releases, Discover Random) returns individual tracks forming a direct playback queue when tapped.
 * **Smart New Releases Engine**: Intelligent filter engine verifying exact release dates to deliver genuine fresh releases without older catalog clutter.
 * **Trending Charts & Country Filters**: Global and region-specific trending lists (including auto-location detection and country picker).
